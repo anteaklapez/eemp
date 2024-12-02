@@ -8,11 +8,13 @@ import {
   InputLabel,
   FormControl,
   Typography,
+  useTheme
 } from "@mui/material";
-import { TimePicker } from "@mui/x-date-pickers/TimePicker";
 import { Autocomplete } from "@mui/material";
 import dayjs, { Dayjs } from "dayjs";
 import locationsData from "../assets/locations.json";
+import "./DeviceForm.scss"; // Import your SCSS file
+
 
 // Define a TypeScript interface for the form data
 interface FormData {
@@ -31,12 +33,14 @@ interface FormData {
 }
 
 const DeviceForm: React.FC = () => {
+  const theme = useTheme(); // Access the theme here
+
   const [formData, setFormData] = useState<FormData>({
     category: "",
     name: "",
     manufacturerModel: "",
     powerConsumption: "",
-    unit: "W",
+    unit: "",
     frequency: "",
     duration: "",
     peakHoursStart: dayjs(),
@@ -51,8 +55,10 @@ const DeviceForm: React.FC = () => {
   };
 
   const handleSubmit = () => {
+    // Save form data to localStorage
+    localStorage.setItem("deviceFormData", JSON.stringify(formData));
     console.log("Form Submitted:", formData);
-    // Add logic for submitting the data
+    alert("Form data saved to localStorage!");
   };
 
   return (
@@ -105,11 +111,14 @@ const DeviceForm: React.FC = () => {
           onChange={(e) => handleChange("powerConsumption", e.target.value)}
           fullWidth
         />
-        <FormControl>
+        <FormControl sx={{
+            minWidth: "fit-content",
+          }}>
           <Select
             value={formData.unit}
             onChange={(e) => handleChange("unit", e.target.value)}
           >
+            <MenuItem value="">None</MenuItem>
             <MenuItem value="W">W</MenuItem>
             <MenuItem value="kW">kW</MenuItem>
           </Select>
@@ -141,29 +150,27 @@ const DeviceForm: React.FC = () => {
 
       {/* Peak Hours */}
       <Box sx={{ display: "flex", gap: 2 }}>
-        <TimePicker
+        <TextField
           label="Peak Hours Start"
-          value={formData.peakHoursStart}
-          onChange={(newValue) => handleChange("peakHoursStart", newValue)}
-          slotProps={{
-            textField: {
-              fullWidth: true,
-            },
-          }}
+          type="time"
+          value={formData.peakHoursStart?.format("HH:mm") || ""}
+          onChange={(e) =>
+            handleChange("peakHoursStart", dayjs(e.target.value, "HH:mm"))
+          }
+          fullWidth
         />
-        <TimePicker
+        <TextField
           label="Peak Hours End"
-          value={formData.peakHoursEnd}
-          onChange={(newValue) => handleChange("peakHoursEnd", newValue)}
-          slotProps={{
-            textField: {
-              fullWidth: true,
-            },
-          }}
+          type="time"
+          value={formData.peakHoursEnd?.format("HH:mm") || ""}
+          onChange={(e) =>
+            handleChange("peakHoursEnd", dayjs(e.target.value, "HH:mm"))
+          }
+          fullWidth
         />
       </Box>
 
-      {/* Location with Searchable Dropdown */}
+      {/* Location */}
       <Autocomplete
         options={locationsData.locations}
         getOptionLabel={(option) => option || ""}
@@ -174,6 +181,7 @@ const DeviceForm: React.FC = () => {
         )}
         clearOnEscape
         freeSolo
+        disablePortal
       />
 
       {/* Environment */}
@@ -192,7 +200,7 @@ const DeviceForm: React.FC = () => {
 
 
       {/* Submit Button */}
-      <Button variant="contained" color="primary" onClick={handleSubmit}>
+      <Button variant="contained" color="primary" sx={{ backgroundColor: theme.palette.primary.darker }} onClick={handleSubmit}>
         Save
       </Button>
     </Box>
