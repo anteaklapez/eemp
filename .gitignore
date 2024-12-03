@@ -206,7 +206,6 @@ Thumbs.db
 
 # Gatsby files (if using Gatsby)
 .cache/
-public/
 
 # Storybook build outputs
 .out/
