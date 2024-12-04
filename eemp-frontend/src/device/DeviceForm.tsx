@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   TextField,
@@ -11,7 +11,7 @@ import {
   useTheme,
   Autocomplete,
 } from "@mui/material";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import dayjs, { Dayjs } from "dayjs";
 import categoriesData from "../assets/categories.json";
 import locationsData from "../assets/locations.json";
@@ -32,9 +32,17 @@ interface FormData {
   estimatedCost: string;
 }
 
+// Define the expected structure of location.state
+interface LocationState {
+  device?: FormData;
+  index?: number;
+}
+
 const DeviceForm: React.FC = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const location = useLocation() as { state?: LocationState };
+
   const [formData, setFormData] = useState<FormData>({
     category: "",
     name: "",
@@ -50,21 +58,42 @@ const DeviceForm: React.FC = () => {
     estimatedCost: "",
   });
 
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+
+  // Pre-fill form data if editing
+  useEffect(() => {
+    if (location.state?.device) {
+      const device = location.state.device;
+      setFormData({
+        ...device,
+        peakHoursStart: device.peakHoursStart ? dayjs(device.peakHoursStart) : null,
+        peakHoursEnd: device.peakHoursEnd ? dayjs(device.peakHoursEnd) : null,
+      });
+      setIsEditing(true);
+      setEditingIndex(location.state.index ?? null);
+    }
+  }, [location.state]);
+
   const handleChange = (field: keyof FormData, value: any) => {
     setFormData({ ...formData, [field]: value });
   };
 
   const handleSubmit = () => {
-    // Get the existing devices from localStorage
     const existingDevices = JSON.parse(localStorage.getItem("devices") || "[]");
 
-    // Add the new device to the array
-    const updatedDevices = [...existingDevices, formData];
+    if (isEditing && editingIndex !== null) {
+      // Update the existing device at the specified index
+      existingDevices[editingIndex] = formData;
+    } else {
+      // Add a new device
+      existingDevices.push(formData);
+    }
 
     // Save the updated devices array back to localStorage
-    localStorage.setItem("devices", JSON.stringify(updatedDevices));
+    localStorage.setItem("devices", JSON.stringify(existingDevices));
 
-    alert("Device saved successfully!");
+    alert(isEditing ? "Device updated successfully!" : "Device saved successfully!");
 
     // Navigate back to the Device Management page
     navigate("/management");
@@ -84,7 +113,7 @@ const DeviceForm: React.FC = () => {
       }}
     >
       <Typography variant="h5" sx={{ textAlign: "center" }}>
-        Add New Device
+        {isEditing ? "Edit Device" : "Add New Device"}
       </Typography>
 
       {/* Category Dropdown */}
@@ -168,7 +197,7 @@ const DeviceForm: React.FC = () => {
         <TextField
           label="Peak Hours Start"
           type="time"
-          value={formData.peakHoursStart?.format("HH:mm") || ""}
+          value={formData.peakHoursStart ? formData.peakHoursStart.format("HH:mm") : ""}
           onChange={(e) =>
             handleChange("peakHoursStart", dayjs(e.target.value, "HH:mm"))
           }
@@ -177,7 +206,7 @@ const DeviceForm: React.FC = () => {
         <TextField
           label="Peak Hours End"
           type="time"
-          value={formData.peakHoursEnd?.format("HH:mm") || ""}
+          value={formData.peakHoursEnd ? formData.peakHoursEnd.format("HH:mm") : ""}
           onChange={(e) =>
             handleChange("peakHoursEnd", dayjs(e.target.value, "HH:mm"))
           }
@@ -218,7 +247,7 @@ const DeviceForm: React.FC = () => {
         sx={{ backgroundColor: theme.palette.primary.darker }}
         onClick={handleSubmit}
       >
-        Save
+        {isEditing ? "Update" : "Save"}
       </Button>
     </Box>
   );

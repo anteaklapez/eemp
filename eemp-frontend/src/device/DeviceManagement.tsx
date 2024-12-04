@@ -8,19 +8,15 @@ import {
   ListItemText,
   IconButton,
   Avatar,
-  TextField,
   Button,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import CheckIcon from "@mui/icons-material/Check";
 import { useNavigate } from "react-router-dom";
 import categoriesData from "../assets/categories.json"; // Import the JSON file
 
 const DeviceManagement: React.FC = () => {
   const [devices, setDevices] = useState<{ name: string; category: string }[]>([]);
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [editedName, setEditedName] = useState<string>("");
   const navigate = useNavigate();
 
   // Load devices from localStorage on component mount
@@ -36,58 +32,43 @@ const DeviceManagement: React.FC = () => {
   };
 
   const handleEdit = (index: number) => {
-    setEditingIndex(index);
-    setEditedName(devices[index].name);
+    const deviceToEdit = devices[index];
+    navigate("/form", { state: { device: deviceToEdit, index } });
   };
 
-  const handleSaveEdit = (index: number) => {
-    const updatedDevices = [...devices];
-    updatedDevices[index].name = editedName;
-    setDevices(updatedDevices);
-    localStorage.setItem("devices", JSON.stringify(updatedDevices));
-    setEditingIndex(null);
+  const getCategoryIcon = (category: string): string => {
+    const categoryInfo = categoriesData.categories.find((item) => item.name === category);
+    return categoryInfo ? categoryInfo.icon : categoriesData.defaultIcon;
   };
-
- const getCategoryIcon = (category: string): string => {
-  const categoryInfo = categoriesData.categories.find((item) => item.name === category);
-  return categoryInfo ? categoryInfo.icon : categoriesData.defaultIcon;
-};
-
 
   return (
     <Box
       sx={{
+        width: "100%",
+        maxWidth: "600px",
+        margin: "0 auto",
+        padding: "16px",
         display: "flex",
         flexDirection: "column",
+        justifyContent: "flex-start",
         height: "100vh",
-        padding: "16px",
         backgroundColor: "#fff",
       }}
     >
       {/* Header */}
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-        <Typography variant="h6" fontWeight="bold">
+      <Box
+        sx={{
+          marginBottom: "24px",
+          textAlign: "left",
+        }}
+      >
+        <Typography variant="h6" fontWeight="bold" sx={{ marginBottom: "8px" }}>
           Device Management
         </Typography>
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={() => navigate("/form")}
-          sx={{
-            backgroundColor: "#2C2C2C",
-            color: "white",
-            textTransform: "none",
-            ":hover": {
-              backgroundColor: "#1F1F1F",
-            },
-          }}
-        >
-          Add New Device
-        </Button>
+        <Typography variant="subtitle1" color="text.secondary">
+          List of Devices
+        </Typography>
       </Box>
-      <Typography variant="subtitle1" color="text.secondary" sx={{ marginBottom: "16px" }}>
-        List of Devices
-      </Typography>
 
       {/* Device List */}
       {devices.length === 0 ? (
@@ -95,46 +76,34 @@ const DeviceManagement: React.FC = () => {
           No devices added yet. Click "Add New Device" to get started.
         </Typography>
       ) : (
-        <List>
+        <List sx={{ marginBottom: "16px" }}>
           {devices.map((device, index) => (
             <ListItem
               key={index}
               sx={{
                 display: "flex",
                 justifyContent: "space-between",
-                paddingLeft: 0,
-                paddingRight: 0,
+                padding: "8px 0",
               }}
             >
               <ListItemAvatar>
                 <Avatar
-                  src={getCategoryIcon(device.category)} // Dynamically set the icon based on category
+                  src={getCategoryIcon(device.category)}
                   alt={`${device.category} Icon`}
                   sx={{
                     backgroundColor: "transparent",
                   }}
                 />
               </ListItemAvatar>
-              {editingIndex === index ? (
-                <TextField
-                  value={editedName}
-                  onChange={(e) => setEditedName(e.target.value)}
-                  fullWidth
-                  sx={{ marginRight: "16px" }}
-                />
-              ) : (
-                <ListItemText primary={device.name} secondary={device.category} />
-              )}
+              <ListItemText
+                primary={device.name}
+                secondary={device.category}
+                sx={{ textAlign: "left" }}
+              />
               <Box>
-                {editingIndex === index ? (
-                  <IconButton edge="end" aria-label="save" onClick={() => handleSaveEdit(index)}>
-                    <CheckIcon />
-                  </IconButton>
-                ) : (
-                  <IconButton edge="end" aria-label="edit" onClick={() => handleEdit(index)}>
-                    <EditIcon />
-                  </IconButton>
-                )}
+                <IconButton edge="end" aria-label="edit" onClick={() => handleEdit(index)}>
+                  <EditIcon />
+                </IconButton>
                 <IconButton edge="end" aria-label="delete" onClick={() => handleDelete(index)}>
                   <DeleteIcon />
                 </IconButton>
@@ -143,6 +112,26 @@ const DeviceManagement: React.FC = () => {
           ))}
         </List>
       )}
+
+      {/* Add Device Button */}
+      <Box sx={{ textAlign: "center", marginTop: "20px" }}>
+        <Button
+          variant="contained"
+          onClick={() => navigate("/form")}
+          sx={{
+            backgroundColor: "#2C2C2C",
+            color: "white",
+            textTransform: "none",
+            padding: "12px 24px",
+            borderRadius: "8px",
+            ":hover": {
+              backgroundColor: "#1F1F1F",
+            },
+          }}
+        >
+          Add Device
+        </Button>
+      </Box>
     </Box>
   );
 };
