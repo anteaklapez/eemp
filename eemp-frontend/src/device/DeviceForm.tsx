@@ -8,15 +8,15 @@ import {
   InputLabel,
   FormControl,
   Typography,
-  useTheme
+  useTheme,
+  Autocomplete,
 } from "@mui/material";
-import { Autocomplete } from "@mui/material";
+import { useNavigate } from "react-router-dom";
 import dayjs, { Dayjs } from "dayjs";
+import categoriesData from "../assets/categories.json";
 import locationsData from "../assets/locations.json";
-import "./DeviceForm.scss"; // Import your SCSS file
 
-
-// Define a TypeScript interface for the form data
+// Define the form data interface
 interface FormData {
   category: string;
   name: string;
@@ -33,8 +33,8 @@ interface FormData {
 }
 
 const DeviceForm: React.FC = () => {
-  const theme = useTheme(); // Access the theme here
-
+  const theme = useTheme();
+  const navigate = useNavigate();
   const [formData, setFormData] = useState<FormData>({
     category: "",
     name: "",
@@ -55,10 +55,19 @@ const DeviceForm: React.FC = () => {
   };
 
   const handleSubmit = () => {
-    // Save form data to localStorage
-    localStorage.setItem("deviceFormData", JSON.stringify(formData));
-    console.log("Form Submitted:", formData);
-    alert("Form data saved to localStorage!");
+    // Get the existing devices from localStorage
+    const existingDevices = JSON.parse(localStorage.getItem("devices") || "[]");
+
+    // Add the new device to the array
+    const updatedDevices = [...existingDevices, formData];
+
+    // Save the updated devices array back to localStorage
+    localStorage.setItem("devices", JSON.stringify(updatedDevices));
+
+    alert("Device saved successfully!");
+
+    // Navigate back to the Device Management page
+    navigate("/management");
   };
 
   return (
@@ -66,13 +75,19 @@ const DeviceForm: React.FC = () => {
       component="form"
       noValidate
       autoComplete="off"
-      sx={{ width: 400, margin: "0 auto", display: "flex", flexDirection: "column", gap: 2 }}
+      sx={{
+        width: 400,
+        margin: "0 auto",
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+      }}
     >
       <Typography variant="h5" sx={{ textAlign: "center" }}>
         Add New Device
       </Typography>
 
-      {/* Category */}
+      {/* Category Dropdown */}
       <FormControl fullWidth>
         <InputLabel id="category-label">Category</InputLabel>
         <Select
@@ -80,9 +95,11 @@ const DeviceForm: React.FC = () => {
           value={formData.category}
           onChange={(e) => handleChange("category", e.target.value)}
         >
-          <MenuItem value="">None</MenuItem>
-          <MenuItem value="Lighting">Lighting</MenuItem>
-          <MenuItem value="Appliances">Appliances</MenuItem>
+          {categoriesData.categories.map((category) => (
+            <MenuItem key={category.name} value={category.name}>
+              {category.name}
+            </MenuItem>
+          ))}
         </Select>
       </FormControl>
 
@@ -111,9 +128,7 @@ const DeviceForm: React.FC = () => {
           onChange={(e) => handleChange("powerConsumption", e.target.value)}
           fullWidth
         />
-        <FormControl sx={{
-            minWidth: "fit-content",
-          }}>
+        <FormControl sx={{ minWidth: "fit-content" }}>
           <Select
             value={formData.unit}
             onChange={(e) => handleChange("unit", e.target.value)}
@@ -170,15 +185,13 @@ const DeviceForm: React.FC = () => {
         />
       </Box>
 
-      {/* Location */}
+      {/* Location (Autocomplete) */}
       <Autocomplete
         options={locationsData.locations}
         getOptionLabel={(option) => option || ""}
-        value={formData.location || ""}
-        onChange={(event, newValue) => handleChange("location", newValue)}
-        renderInput={(params) => (
-          <TextField {...params} label="Location" fullWidth />
-        )}
+        value={formData.location}
+        onChange={(event, newValue) => handleChange("location", newValue || "")}
+        renderInput={(params) => <TextField {...params} label="Location" fullWidth />}
         clearOnEscape
         freeSolo
         disablePortal
@@ -198,9 +211,13 @@ const DeviceForm: React.FC = () => {
         </Select>
       </FormControl>
 
-
       {/* Submit Button */}
-      <Button variant="contained" color="primary" sx={{ backgroundColor: theme.palette.primary.darker }} onClick={handleSubmit}>
+      <Button
+        variant="contained"
+        color="primary"
+        sx={{ backgroundColor: theme.palette.primary.darker }}
+        onClick={handleSubmit}
+      >
         Save
       </Button>
     </Box>

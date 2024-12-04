@@ -1,0 +1,65 @@
+import React from "react";
+import { Box, Typography, Button, Container } from "@mui/material";
+import { useNavigate } from "react-router-dom";
+
+const LandingPage: React.FC = () => {
+  const navigate = useNavigate();
+
+  return (
+    <Box
+      sx={{
+        minHeight: "100%", // Ensure it takes full viewport height
+        minWidth: "100%", // Ensure it takes full viewport width
+        background: "linear-gradient(to bottom, #6B97A4 0%, #28393E 100%)",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "flex-start", // Align content closer to the top
+        alignItems: "center", // Center horizontally
+        color: "white",
+        paddingTop: "10vh", // Optional: Add spacing at the top
+      }}
+    >
+      <Container>
+        <Typography
+          variant="h3"
+          gutterBottom
+          sx={{
+            color: "black",
+            fontWeight: "bold",
+            fontSize: "5rem",
+            textAlign: "left", // Align text to the left
+          }}
+        >
+          Achieve energy independence. <br /> Save on costs.
+        </Typography>
+        <Typography
+          variant="body1"
+          sx={{
+            fontSize: "2rem",
+            marginBottom: "2rem",
+            textAlign: "left", // Align text to the left
+          }}
+        >
+          Input and monitor your household devices, view real-time energy consumption data, and receive personalized
+          recommendations to reduce costs and increase efficiency.
+        </Typography>
+        <Box sx={{ textAlign: "left" }}>
+          <Button
+            variant="contained"
+            color="primary"
+            sx={{
+              padding: "10px 20px",
+              fontSize: "1rem",
+              textTransform: "none",
+            }}
+            onClick={() => navigate("/management")} // Placeholder route
+          >
+            Learn More
+          </Button>
+        </Box>
+      </Container>
+    </Box>
+  );
+};
+
+export default LandingPage;

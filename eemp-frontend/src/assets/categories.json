@@ -1,0 +1,21 @@
+{
+  "categories": [
+    {
+      "name": "Appliances",
+      "icon": "/assets/icons/washing-machine-svgrepo-com.svg"
+    },
+    {
+      "name": "Lighting",
+      "icon": "/assets/icons/sun-svgrepo-com.svg"
+    },
+    {
+      "name": "HVAC",
+      "icon": "/assets/icons/airconditioning-o-svgrepo-com.svg"
+    },
+    {
+      "name": "Production Devices",
+      "icon": "/assets/icons/production-icon.svg"
+    }
+  ],
+  "defaultIcon": "/assets/icons/default-icon.svg"
+}
