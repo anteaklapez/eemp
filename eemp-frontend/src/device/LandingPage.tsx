@@ -30,7 +30,7 @@ const LandingPage: React.FC = () => {
             textAlign: "left", // Align text to the left
           }}
         >
-          Achieve energy independence. <br /> Save on costs.
+          Achieve energy Independence. <br /> Save on costs.
         </Typography>
         <Typography
           variant="body1"
@@ -52,7 +52,7 @@ const LandingPage: React.FC = () => {
               fontSize: "1rem",
               textTransform: "none",
             }}
-            onClick={() => navigate("/management")} // Placeholder route
+            onClick={() => navigate("/home")} // Placeholder route
           >
             Learn More
           </Button>
