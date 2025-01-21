@@ -1,9 +1,11 @@
-from typing import List
-from fastapi import FastAPI, Request
+# main.py
+
+from typing import List, Optional
+from fastapi import FastAPI, Request, HTTPException
 from contextlib import asynccontextmanager
 from pvlib.pvsystem import retrieve_sam
-from models import SolarPanelData, WeatherData
-from solar import calculate_energy
+from solar_models import SolarPanelData, WeatherData, EnergyCalculationRequest
+from solar import calculate_energy_with_tmy, calculate_energy
 import pandas as pd
 
 async def lifespan(app: FastAPI):
@@ -23,10 +25,16 @@ async def read_root():
 @app.post("/calculate-energy/")
 async def calculate_energy_endpoint(
     request: Request,
-    solar_panel_data: SolarPanelData,
-    weather_data: List[WeatherData]
+    energy_request: EnergyCalculationRequest
 ):
-    # Convert weather data to DataFrame
+    """
+    Endpoint to calculate energy production.
+    If weather_data is provided, it uses that; otherwise, it uses TMY data.
+    """
+    solar_panel_data = energy_request.solar_panel_data
+    weather_data = energy_request.weather_data
+
+    # User provided weather data
     weather_dict = [data.model_dump() for data in weather_data]
     weather_df = pd.DataFrame(weather_dict)
 
@@ -35,7 +43,16 @@ async def calculate_energy_endpoint(
     weather_df.set_index('datetime', inplace=True)
 
     energy_output = await calculate_energy(request, solar_panel_data, weather_df)
+
     return {"energy_output": energy_output.to_dict()}
+
+
+@app.post("/calculate-energy-tmy/")
+async def calculate_energy_tmy(request: Request, energy_request: EnergyCalculationRequest):
+    solar_panel_data = energy_request.solar_panel_data
+    energy_output = await calculate_energy_with_tmy(request, solar_panel_data)
+    return {"energy_output": energy_output.to_dict()}
+
 
 if __name__ == "__main__":
     import uvicorn
