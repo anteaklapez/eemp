@@ -108,6 +108,7 @@ async def calculate_energy_with_tmy(
         latitude=solar_panel_data.location.latitude,
         longitude=solar_panel_data.location.longitude,
         altitude=solar_panel_data.location.altitude,
+        name=solar_panel_data.location.name,
         tz=solar_panel_data.location.timezone,
     )
 
@@ -155,6 +156,7 @@ async def calculate_energy_with_tmy(
         df, metadata, status, headers = get_pvgis_tmy(
             latitude=solar_panel_data.location.latitude,
             longitude=solar_panel_data.location.longitude,
+            coerce_year=2022,
             outputformat='json',
             usehorizon=True,
             map_variables=True
@@ -172,6 +174,10 @@ async def calculate_energy_with_tmy(
     mc.run_model(weather_df)
 
     # 12. Energy Production (AC Output)
-    energy_output = mc.results.ac
+    annual_energy = mc.results.ac.sum()
 
-    return energy_output
+    energies = {}
+    energies = pd.Series(energies)
+    energies[location.name] = annual_energy
+
+    return energies
