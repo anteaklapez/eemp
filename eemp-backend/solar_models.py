@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import List, Optional
 
 class LocationData(BaseModel):
+    name: str
     latitude: float
     longitude: float
     altitude: float
