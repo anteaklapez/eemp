@@ -7,6 +7,8 @@ from pvlib.pvsystem import retrieve_sam
 from solar_models import SolarPanelData, WeatherData, EnergyCalculationRequest
 from solar import calculate_energy_with_tmy, calculate_energy
 import pandas as pd
+from openweatherservice import get_weather
+from solar_models import LocationData
 
 async def lifespan(app: FastAPI):
     # Load datasets during startup
@@ -52,6 +54,10 @@ async def calculate_energy_tmy(request: Request, energy_request: EnergyCalculati
     solar_panel_data = energy_request.solar_panel_data
     energy_output = await calculate_energy_with_tmy(request, solar_panel_data)
     return {"energy_output": energy_output.to_dict()}
+
+@app.post("/weather/")
+async def weather_endpoint(location: LocationData):
+    return await get_weather(location)
 
 
 if __name__ == "__main__":
