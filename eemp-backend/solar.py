@@ -9,11 +9,9 @@ import pandas as pd
 from solar_models import SolarPanelData
 from fastapi import Request, HTTPException
 from pytz import timezone
-from datetime import datetime
-import pytz
 import logging
+from datetime import datetime
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -25,12 +23,10 @@ async def calculate_energy(
     """
     Calculate solar energy production using pvlib with user-provided weather data.
     """
-    # Retrieve datasets from application state
     sandia_modules = request.app.state.sandia_modules
     cec_modules = request.app.state.cec_modules
     cec_inverters = request.app.state.cec_inverters
 
-    # 1. Location Setup
     location = Location(
         latitude=solar_panel_data.location.latitude,
         longitude=solar_panel_data.location.longitude,
@@ -38,27 +34,33 @@ async def calculate_energy(
         tz=solar_panel_data.location.timezone,
     )
 
-    # 2. Module Parameters
     if solar_panel_data.custom_solar_module:
         module_parameters = solar_panel_data.custom_solar_module.model_dump(exclude={'name'})
+    elif solar_panel_data.module_name:  # Load from predefined modules
+        if solar_panel_data.module_name in sandia_modules:
+            module_parameters = sandia_modules[solar_panel_data.module_name]
+        elif solar_panel_data.module_name in cec_modules:
+            module_parameters = cec_modules[solar_panel_data.module_name]
+        else:
+            raise ValueError(f"Module '{solar_panel_data.module_name}' not found in datasets.")
     else:
-        raise ValueError("Custom solar module parameters are required.")
+        raise ValueError("Either custom solar module parameters or a valid module name must be provided.")
 
-    # 3. Inverter Parameters
     if solar_panel_data.custom_inverter:
         inverter_parameters = solar_panel_data.custom_inverter.model_dump(exclude={'name'})
-        inverter_parameters.pop('name', None)  # Remove 'name' if present
+    elif solar_panel_data.inverter_name:  # Load from predefined inverters
+        if solar_panel_data.inverter_name in cec_inverters:
+            inverter_parameters = cec_inverters[solar_panel_data.inverter_name]
+        else:
+            raise ValueError(f"Inverter '{solar_panel_data.inverter_name}' not found in datasets.")
     else:
-        raise ValueError("Custom inverter parameters are required.")
+        raise ValueError("Either custom inverter parameters or a valid inverter name must be provided.")
 
-    # 4. Temperature Model Parameters
     if solar_panel_data.custom_temp_model_params:
         temperature_params = solar_panel_data.custom_temp_model_params.model_dump()
     else:
-        # Use default temperature model parameters
         temperature_params = TEMPERATURE_MODEL_PARAMETERS['sapm']['open_rack_glass_glass']
 
-    # 5. Create PVSystem
     mount = FixedMount(
         surface_tilt=solar_panel_data.tilt,
         surface_azimuth=solar_panel_data.orientation
@@ -73,23 +75,20 @@ async def calculate_energy(
         inverter_parameters=inverter_parameters
     )
 
-    # 6. Model Chain Setup
-    mc = ModelChain(system, location, temperature_model='sapm', aoi_model='physical', spectral_model='no_loss')
+    mc = ModelChain(system, location, aoi_model='physical', spectral_model='no_loss')
 
-    # 7. Localize weather data to the specified timezone
     tz = timezone(solar_panel_data.location.timezone)
     try:
         weather_data = weather_data.tz_localize('UTC').tz_convert(tz)
     except Exception as e:
         raise ValueError(f"Error localizing timezone: {e}")
 
-    # 8. Run the Model
     mc.run_model(weather_data)
 
-    # 9. Energy Production (AC Output)
     energy_output = mc.results.ac
 
     return energy_output
+
 
 async def calculate_energy_with_tmy(
     request: Request,
@@ -98,12 +97,13 @@ async def calculate_energy_with_tmy(
     """
     Calculate solar energy production using pvlib with TMY data.
     """
-    # Retrieve datasets from application state
     sandia_modules = request.app.state.sandia_modules
     cec_modules = request.app.state.cec_modules
     cec_inverters = request.app.state.cec_inverters
 
-    # 1. Location Setup
+    current_year = datetime.now().year
+    start_year = current_year - 15
+
     location = Location(
         latitude=solar_panel_data.location.latitude,
         longitude=solar_panel_data.location.longitude,
@@ -112,27 +112,33 @@ async def calculate_energy_with_tmy(
         tz=solar_panel_data.location.timezone,
     )
 
-    # 2. Module Parameters
     if solar_panel_data.custom_solar_module:
         module_parameters = solar_panel_data.custom_solar_module.model_dump(exclude={'name'})
+    elif solar_panel_data.module_name:  # Load from predefined modules
+        if solar_panel_data.module_name in sandia_modules:
+            module_parameters = sandia_modules[solar_panel_data.module_name]
+        elif solar_panel_data.module_name in cec_modules:
+            module_parameters = cec_modules[solar_panel_data.module_name]
+        else:
+            raise ValueError(f"Module '{solar_panel_data.module_name}' not found in datasets.")
     else:
-        raise ValueError("Custom solar module parameters are required.")
+        raise ValueError("Either custom solar module parameters or a valid module name must be provided.")
 
-    # 3. Inverter Parameters
     if solar_panel_data.custom_inverter:
         inverter_parameters = solar_panel_data.custom_inverter.model_dump(exclude={'name'})
-        inverter_parameters.pop('name', None)  # Remove 'name' if present
+    elif solar_panel_data.inverter_name:  # Load from predefined inverters
+        if solar_panel_data.inverter_name in cec_inverters:
+            inverter_parameters = cec_inverters[solar_panel_data.inverter_name]
+        else:
+            raise ValueError(f"Inverter '{solar_panel_data.inverter_name}' not found in datasets.")
     else:
-        raise ValueError("Custom inverter parameters are required.")
+        raise ValueError("Either custom inverter parameters or a valid inverter name must be provided.")
 
-    # 4. Temperature Model Parameters
     if solar_panel_data.custom_temp_model_params:
         temperature_params = solar_panel_data.custom_temp_model_params.model_dump()
     else:
-        # Use default temperature model parameters
         temperature_params = TEMPERATURE_MODEL_PARAMETERS['sapm']['open_rack_glass_glass']
 
-    # 5. Create PVSystem
     mount = FixedMount(
         surface_tilt=solar_panel_data.tilt,
         surface_azimuth=solar_panel_data.orientation
@@ -147,37 +153,48 @@ async def calculate_energy_with_tmy(
         inverter_parameters=inverter_parameters
     )
 
-    # 6. Model Chain Setup
     mc = ModelChain(system, location, aoi_model='physical', spectral_model='no_loss')
 
-    # 7. Fetch TMY Data using pvlib's PVGIS interface
-    try:
-        logger.info("Fetching TMY data...")
-        df, metadata, status, headers = get_pvgis_tmy(
-            latitude=solar_panel_data.location.latitude,
-            longitude=solar_panel_data.location.longitude,
-            coerce_year=2022,
-            outputformat='json',
-            usehorizon=True,
-            map_variables=True
-        )
-        logger.info("TMY data fetched successfully." + str(df))
-    except Exception as e:
-        logger.error(f"Error fetching TMY data: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch TMY data.")
+    monthly_outputs = []
 
-    # 8. Convert TMY Data to DataFrame
-    weather_df = df.copy()
+    for year in range(start_year, current_year + 1):
+        try:
+            logger.info("Fetching TMY data...")
+            df, metadata, status, headers = get_pvgis_tmy(
+                latitude=solar_panel_data.location.latitude,
+                longitude=solar_panel_data.location.longitude,
+                outputformat='json',
+                coerce_year=year,
+                usehorizon=True,
+                map_variables=True
+            )
+            logger.info("TMY data fetched successfully.")
+
+            weather_df = df.copy()
+            mc.run_model(weather_df)
+
+            ac_output = mc.results.ac
+
+            if ac_output is None:
+                raise ValueError("AC output is missing from the model results.")
+
+            # Group by month and sum the AC output
+            monthly_energy = ac_output.resample('ME').sum()
+            monthly_outputs.append(monthly_energy)
 
 
-    # 11. Run the Model
-    mc.run_model(weather_df)
+        except Exception as e:
+            logger.error(f"Error fetching TMY data: {e}")
+            raise HTTPException(status_code=500, detail="Failed to fetch TMY data.")
 
-    # 12. Energy Production (AC Output)
-    annual_energy = mc.results.ac.sum()
+    if not monthly_outputs:
+        raise ValueError("No valid TMY data available for the 15-year range.")
 
-    energies = {}
-    energies = pd.Series(energies)
-    energies[location.name] = annual_energy
+    combined_monthly = pd.concat(monthly_outputs, axis=1).mean(axis=1)
+    combined_monthly.index = combined_monthly.index.strftime('%B')  # Format index as month names
+    combined_monthly.name = f"15-Year Average Monthly Energy Production ({location.name})"
 
-    return energies
+    return combined_monthly
+
+
+

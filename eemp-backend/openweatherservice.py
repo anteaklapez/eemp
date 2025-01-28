@@ -1,8 +1,11 @@
 import os
 import requests
 from solar_models import LocationData
+from dotenv import load_dotenv
 
-api_key = os.environ.get("OPENWEATHER_API_KEY")
+load_dotenv()
+
+api_key = os.getenv("OPENWEATHER_API_KEY")
 
 async def get_weather(location: LocationData):
     url = 'http://api.openweathermap.org/data/2.5/forecast?lat={}&lon={}&appid={}'.format(

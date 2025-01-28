@@ -25,7 +25,6 @@ class CustomSolarModule(BaseModel):
 class CustomInverter(BaseModel):
     name: str
     pdc0: float
-
     paco: float
     pdco: float
     vdco: float
@@ -50,12 +49,14 @@ class WeatherData(BaseModel):
     dni: float
 
 class SolarPanelData(BaseModel):
+    inverter_name: str | None = None
+    module_name: str | None = None
     location: LocationData
     tilt: float # tilt in degrees
     orientation: float # == azimuth
-    custom_solar_module: CustomSolarModule | None
-    custom_inverter: CustomInverter | None
-    custom_temp_model_params: CustomTempModelParams | None
+    custom_solar_module: CustomSolarModule | None = None
+    custom_inverter: CustomInverter | None = None
+    custom_temp_model_params: CustomTempModelParams | None = None
 
 class DateRange(BaseModel):
     start_datetime: datetime
@@ -63,5 +64,4 @@ class DateRange(BaseModel):
 
 class EnergyCalculationRequest(BaseModel):
     solar_panel_data: SolarPanelData
-    date_range: DateRange
     weather_data: Optional[List[WeatherData]] = None  # Optional for partial data
