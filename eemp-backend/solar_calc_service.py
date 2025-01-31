@@ -82,6 +82,8 @@ async def calculate_energy(
 
     mc = ModelChain(system, location, aoi_model='physical', spectral_model='no_loss')
 
+    print(type(mc))
+
     tz = timezone(solar_panel_data.location.timezone)
     try:
         weather_data = weather_data.tz_convert(tz)
@@ -89,10 +91,12 @@ async def calculate_energy(
         raise ValueError(f"Error localizing timezone: {e}")
 
     mc.run_model(weather_data)
+    mc_df = pd.DataFrame(mc.results.ac)
 
-    energy_output = mc.results.ac
+    # Ensure output is NaN-safe before returning
+    energy_output = mc_df.fillna(0).round(2)
 
-    return energy_output
+    return energy_output.squeeze() # Convert Series to JSON-safe format
 
 
 async def calculate_energy_with_tmy(
