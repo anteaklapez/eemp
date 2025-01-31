@@ -1,12 +1,15 @@
 # main.py
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request
 from pvlib.pvsystem import retrieve_sam
+import pvlib
 from solar_models import EnergyCalculationRequest
-from solar import calculate_energy_with_tmy, calculate_energy
+from solar_calc_service import calculate_energy_with_tmy, calculate_energy, calculate_radiation
 import pandas as pd
-from openweatherservice import get_weather
 from solar_models import LocationData
+import logging as logger
+from openweatherapi_service import parse_openweatherapi_response
+from redis_service import get_weather_data
 
 async def lifespan(app: FastAPI):
     # Load datasets during startup
@@ -28,18 +31,17 @@ async def calculate_energy_endpoint(
 ):
     """
     Endpoint to calculate energy production.
-    If weather_data is provided, it uses that; otherwise, it uses TMY data.
+    Combines OpenWeatherAPI data with PVGIS irradiance data or simulated irradiance.
     """
     solar_panel_data = energy_request.solar_panel_data
-    weather_data = energy_request.weather_data
+    weather_data = get_weather_data(solar_panel_data.location)
 
-    weather_dict = [data.model_dump() for data in weather_data]
-    weather_df = pd.DataFrame(weather_dict)
+    weather_parsed = parse_openweatherapi_response(weather_data, solar_panel_data.location.timezone)
 
-    weather_df['datetime'] = pd.to_datetime(weather_df['datetime'])
-    weather_df.set_index('datetime', inplace=True)
+    weather_parsed.index = pd.to_datetime(weather_parsed.index)
 
-    energy_output = await calculate_energy(request, solar_panel_data, weather_df)
+    weather_full = calculate_radiation(solar_panel_data, weather_parsed)
+    energy_output = await calculate_energy(request, solar_panel_data, weather_full)
 
     return {"energy_output": energy_output.to_dict()}
 
@@ -52,7 +54,7 @@ async def calculate_energy_tmy(request: Request, energy_request: EnergyCalculati
 
 @app.post("/weather/")
 async def weather_endpoint(location: LocationData):
-    return await get_weather(location)
+    return get_weather_data(location)
 
 
 if __name__ == "__main__":
