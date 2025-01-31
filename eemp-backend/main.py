@@ -1,18 +1,13 @@
-# main.py
-
 from fastapi import FastAPI, Request
 from pvlib.pvsystem import retrieve_sam
-import pvlib
 from solar_models import EnergyCalculationRequest
 from solar_calc_service import calculate_energy_with_tmy, calculate_energy, calculate_radiation
 import pandas as pd
 from solar_models import LocationData
-import logging as logger
 from openweatherapi_service import parse_openweatherapi_response
 from redis_service import get_weather_data
 
 async def lifespan(app: FastAPI):
-    # Load datasets during startup
     app.state.sandia_modules = retrieve_sam('SandiaMod')
     app.state.cec_modules = retrieve_sam('CECMod')
     app.state.cec_inverters = retrieve_sam('cecinverter')

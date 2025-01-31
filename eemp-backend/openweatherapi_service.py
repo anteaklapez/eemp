@@ -37,9 +37,8 @@ def parse_openweatherapi_response(weather_api_response: dict, timezone_str: str)
     data = []
     for record in records:
         try:
-            # Convert UNIX timestamp to UTC datetime with timezone info
             dt_utc = datetime.fromtimestamp(record['dt'], tz=ZoneInfo("UTC"))
-            # Convert UTC datetime to local timezone
+
             dt_local = dt_utc.astimezone(tz)
             temp = record['main']['temp']
             wind_speed = record['wind']['speed']
