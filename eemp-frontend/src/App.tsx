@@ -5,16 +5,16 @@ import LandingPage from "./device/LandingPage";
 import DeviceForm from "./device/DeviceForm";
 import DeviceManagement from "./device/DeviceManagement";
 import HomePage from "./device/HomePage";
-import TipsPage from "./device/TipsPage"; // Import the new TipsPage
+import TipsPage from "./device/TipsPage";
 import { LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import "@fontsource/inter";
 import { createTheme } from "@mui/material/styles";
 import { blueGrey } from "@mui/material/colors";
-import { ThemeProvider, BottomNavigation, BottomNavigationAction, Paper } from "@mui/material";
+import { ThemeProvider, BottomNavigation, BottomNavigationAction, Paper, Box } from "@mui/material";
 import HomeIcon from "@mui/icons-material/Home";
 import AppsIcon from "@mui/icons-material/Apps";
-import LightbulbIcon from "@mui/icons-material/Lightbulb"; // Import LightbulbIcon
+import LightbulbIcon from "@mui/icons-material/Lightbulb";
 import { CSSTransition, SwitchTransition } from "react-transition-group";
 
 declare module "@mui/material/styles" {
@@ -59,14 +59,15 @@ const Navigation: React.FC = () => {
         <Paper
             sx={{
                 position: "fixed",
-                bottom: 15,
+                bottom: 0,
                 left: "50%",
                 transform: "translateX(-50%)",
-                width: "70%",
-                maxWidth: 350,
+                width: "100%",
+                maxWidth: 400,
                 background: "#f5f5f5",
-                borderRadius: "20px",
-                boxShadow: "0px 2px 5px rgba(0, 0, 0, 0.1)",
+                borderRadius: "20px 20px 0 0",
+                boxShadow: "0px -2px 5px rgba(0, 0, 0, 0.1)",
+                zIndex: 1000,
             }}
             elevation={3}
         >
@@ -79,7 +80,6 @@ const Navigation: React.FC = () => {
                     justifyContent: "space-around",
                 }}
             >
-                {/* Home Tab */}
                 <BottomNavigationAction
                     label="Home"
                     icon={<HomeIcon />}
@@ -89,16 +89,13 @@ const Navigation: React.FC = () => {
                         borderRadius: "20px",
                         transform: getCurrentTab() === 0 ? "scale(1.05)" : "scale(0.9)",
                         transition: "all 0.3s ease-in-out",
-                        "& .MuiSvgIcon-root": {
-                            color: "black",
-                        },
+                        "& .MuiSvgIcon-root": { color: "black" },
                         "& .MuiBottomNavigationAction-label": {
-                            display: getCurrentTab() === 0 ? "block" : "none", // Show label only when selected
+                            display: getCurrentTab() === 0 ? "block" : "none",
                             color: "black",
                         },
                     }}
                 />
-                {/* Devices Tab */}
                 <BottomNavigationAction
                     label="Devices"
                     icon={<AppsIcon />}
@@ -108,16 +105,13 @@ const Navigation: React.FC = () => {
                         borderRadius: "20px",
                         transform: getCurrentTab() === 1 ? "scale(1.05)" : "scale(0.9)",
                         transition: "all 0.3s ease-in-out",
-                        "& .MuiSvgIcon-root": {
-                            color: "black",
-                        },
+                        "& .MuiSvgIcon-root": { color: "black" },
                         "& .MuiBottomNavigationAction-label": {
-                            display: getCurrentTab() === 1 ? "block" : "none", // Show label only when selected
+                            display: getCurrentTab() === 1 ? "block" : "none",
                             color: "black",
                         },
                     }}
                 />
-                {/* Tips Tab */}
                 <BottomNavigationAction
                     label="Tips"
                     icon={<LightbulbIcon />}
@@ -127,11 +121,9 @@ const Navigation: React.FC = () => {
                         borderRadius: "20px",
                         transform: getCurrentTab() === 2 ? "scale(1.05)" : "scale(0.9)",
                         transition: "all 0.3s ease-in-out",
-                        "& .MuiSvgIcon-root": {
-                            color: "black",
-                        },
+                        "& .MuiSvgIcon-root": { color: "black" },
                         "& .MuiBottomNavigationAction-label": {
-                            display: getCurrentTab() === 2 ? "block" : "none", // Show label only when selected
+                            display: getCurrentTab() === 2 ? "block" : "none",
                             color: "black",
                         },
                     }}
@@ -155,27 +147,41 @@ const App: React.FC = () => {
         } else if (prevPath === "/home" && location.pathname === "/management") {
             return "slide-right";
         }
-        return "fade"; // Fallback for unknown transitions
+        return "fade";
     };
 
     return (
         <ThemeProvider theme={theme}>
             <LocalizationProvider dateAdapter={AdapterDayjs}>
-                <SwitchTransition>
-                    <CSSTransition
-                        key={location.pathname}
-                        classNames={getAnimationDirection()}
-                        timeout={300}
-                    >
-                        <Routes location={location}>
-                            <Route path="/" element={<LandingPage />} />
-                            <Route path="/home" element={<HomePage />} />
-                            <Route path="/management" element={<DeviceManagement />} />
-                            <Route path="/form" element={<DeviceForm />} />
-                            <Route path="/tips" element={<TipsPage />} />
-                        </Routes>
-                    </CSSTransition>
-                </SwitchTransition>
+                <Box
+                    sx={{
+                        minHeight: "100vh",
+                        width: "100vw",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        color: "black",
+                        paddingBottom: "80px", // 👈 Extra space for navigation
+                        overflowY: "auto", // 👈 Ensures scrolling works
+                    }}
+                >
+                    <SwitchTransition>
+                        <CSSTransition
+                            key={location.pathname}
+                            classNames={getAnimationDirection()}
+                            timeout={300}
+                        >
+                            <Routes location={location}>
+                                <Route path="/" element={<LandingPage />} />
+                                <Route path="/home" element={<HomePage />} />
+                                <Route path="/management" element={<DeviceManagement />} />
+                                <Route path="/form" element={<DeviceForm />} />
+                                <Route path="/tips" element={<TipsPage />} />
+                                <Route path="/landingPage" element={<LandingPage />} />
+                            </Routes>
+                        </CSSTransition>
+                    </SwitchTransition>
+                </Box>
                 {/* Conditionally render the navigation bar */}
                 {location.pathname !== "/" && location.pathname !== "/form" && <Navigation />}
             </LocalizationProvider>
