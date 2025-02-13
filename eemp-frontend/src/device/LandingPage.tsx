@@ -52,7 +52,7 @@ const LandingPage: React.FC = () => {
               fontSize: "1rem",
               textTransform: "none",
             }}
-            onClick={() => navigate("/home")} // Placeholder route
+            onClick={() => navigate("/location")} // Placeholder route
           >
             Learn More
           </Button>

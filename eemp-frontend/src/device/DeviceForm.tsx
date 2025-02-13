@@ -16,8 +16,9 @@ import dayjs, { Dayjs } from "dayjs";
 import categoriesData from "../assets/categories.json";
 import locationsData from "../assets/locations.json";
 
-// Define the form data interface
+// Extend the form data interface to include id and lastUpdated
 interface FormData {
+  id?: number | string; // Allow string if using randomUUID
   category: string;
   name: string;
   manufacturerModel: string;
@@ -30,6 +31,7 @@ interface FormData {
   location: string;
   environment: string;
   estimatedCost: string;
+  lastUpdated?: string;
 }
 
 // Define the expected structure of location.state
@@ -82,12 +84,20 @@ const DeviceForm: React.FC = () => {
   const handleSubmit = () => {
     const existingDevices = JSON.parse(localStorage.getItem("devices") || "[]");
 
+    // Set the lastUpdated timestamp
+    const updatedFormData = {
+      ...formData,
+      lastUpdated: new Date().toISOString(),
+    };
+
     if (isEditing && editingIndex !== null) {
       // Update the existing device at the specified index
-      existingDevices[editingIndex] = formData;
+      existingDevices[editingIndex] = updatedFormData;
     } else {
-      // Add a new device
-      existingDevices.push(formData);
+      // Add a new device with a guaranteed unique numeric ID
+      updatedFormData.id = Number(`${Date.now()}${Math.floor(Math.random() * 1000)}`);
+      // Or for a string ID: updatedFormData.id = crypto.randomUUID();
+      existingDevices.push(updatedFormData);
     }
 
     // Save the updated devices array back to localStorage
@@ -198,18 +208,14 @@ const DeviceForm: React.FC = () => {
           label="Peak Hours Start"
           type="time"
           value={formData.peakHoursStart ? formData.peakHoursStart.format("HH:mm") : ""}
-          onChange={(e) =>
-            handleChange("peakHoursStart", dayjs(e.target.value, "HH:mm"))
-          }
+          onChange={(e) => handleChange("peakHoursStart", dayjs(e.target.value, "HH:mm"))}
           fullWidth
         />
         <TextField
           label="Peak Hours End"
           type="time"
           value={formData.peakHoursEnd ? formData.peakHoursEnd.format("HH:mm") : ""}
-          onChange={(e) =>
-            handleChange("peakHoursEnd", dayjs(e.target.value, "HH:mm"))
-          }
+          onChange={(e) => handleChange("peakHoursEnd", dayjs(e.target.value, "HH:mm"))}
           fullWidth
         />
       </Box>

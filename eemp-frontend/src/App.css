@@ -8,7 +8,6 @@ html, body {
   padding: 0;
   height: 100%; /* Ensures the html and body fill the viewport */
   width: 100%;  /* Ensures the html and body fill the viewport */
-  overflow: hidden;
 }
 
 #root {

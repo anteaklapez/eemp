@@ -16,6 +16,8 @@ import HomeIcon from "@mui/icons-material/Home";
 import AppsIcon from "@mui/icons-material/Apps";
 import LightbulbIcon from "@mui/icons-material/Lightbulb"; // Import LightbulbIcon
 import { CSSTransition, SwitchTransition } from "react-transition-group";
+import LocationAccess from "./device/LocationAccess";
+import DeviceDetails from "./device/DeviceDetails";
 
 declare module "@mui/material/styles" {
     interface PaletteColor {
@@ -173,11 +175,13 @@ const App: React.FC = () => {
                             <Route path="/management" element={<DeviceManagement />} />
                             <Route path="/form" element={<DeviceForm />} />
                             <Route path="/tips" element={<TipsPage />} />
+                            <Route path="/location" element={<LocationAccess />} />
+                            <Route path="/device-details" element={<DeviceDetails />} />
                         </Routes>
                     </CSSTransition>
                 </SwitchTransition>
                 {/* Conditionally render the navigation bar */}
-                {location.pathname !== "/" && location.pathname !== "/form" && <Navigation />}
+                {location.pathname !== "/" && location.pathname !== "/form" && location.pathname !== "/location" && location.pathname !== "/device-details" && <Navigation />}
             </LocalizationProvider>
         </ThemeProvider>
     );
