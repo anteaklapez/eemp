@@ -1,3 +1,4 @@
+from typing import List
 from zoneinfo import ZoneInfo
 
 import joblib
@@ -9,6 +10,7 @@ from solar_models import LocationData, SolarPanelData
 from openweatherapi_service import parse_hourly_response, parse_daily_response
 from solar_calc_service import calculate_radiation
 from fastapi import APIRouter
+from device_models import Device, PredictionRequest
 
 router = APIRouter()
 
@@ -24,20 +26,79 @@ features_to_scale = ['latitude', 'longitude', 'average_consumption', 'temperatur
                      'radiation_direct_horizontal', 'radiation_diffuse_horizontal']
 
 
-# [Keep existing model loading code unchanged]
+# New consumption calculation functions
+def calculate_hourly_consumption(devices: List[Device], start_date: str, tz: ZoneInfo, hours: int = 48) -> pd.Series:
+    """Calculate total kW consumption for each hour in 48-hour period"""
+    start = pd.Timestamp(start_date).tz_localize(tz)
+    end = start + pd.Timedelta(hours=hours)
+    index = pd.date_range(start=start, periods=hours, freq='h', tz=tz)
+    consumption = pd.Series(0.0, index=index, name='consumption')
 
-def prepare_hourly_forecast(location: LocationData, consumption: float, weather_df: pd.DataFrame):
-    """Prepares DataFrame for hourly forecast (48 hours)"""
-    tz = ZoneInfo(location.timezone)
+    for device in devices:
+        # Convert power values to kW
+        active_power = device.powerRating.value / 1000
+        standby_power = device.standbyPower.value / 1000
+        num_devices = device.numberOfDevices
 
-    # Create a complete hourly index for the next 48 hours
-    start_time = pd.Timestamp.now(tz=tz).floor('h')
-    full_index = pd.date_range(start=start_time, periods=48, freq='h', tz=tz)
+        # Initialize active duration matrix
+        active_duration = pd.Series(0.0, index=index)
 
-    # Reindex the weather data to fill missing hours
-    weather_df = weather_df.reindex(full_index, method='ffill')
+        # Calculate active times
+        for usage in device.usagePattern.usage_times:
+            usage_start = pd.Timestamp(usage.start).tz_convert(tz)
+            usage_end = pd.Timestamp(usage.end).tz_convert(tz)
 
-    # Build rows from the properly aligned DataFrame
+            # Clip to prediction window
+            if usage_end <= start or usage_start >= end:
+                continue
+
+            # Calculate overlapping hours
+            overlap_start = max(usage_start, start)
+            overlap_end = min(usage_end, end)
+
+            # Create range of affected hours
+            hours_in_usage = pd.date_range(
+                start=overlap_start.floor('h'),
+                end=overlap_end.ceil('h'),
+                freq='h',
+                inclusive='left'
+            )
+
+            # Calculate duration per hour
+            for hour in hours_in_usage:
+                if hour not in active_duration.index:
+                    continue
+                hour_start = hour
+                hour_end = hour + pd.Timedelta(hours=1)
+
+                # Calculate overlap duration
+                duration_start = max(overlap_start, hour_start)
+                duration_end = min(overlap_end, hour_end)
+                duration = (duration_end - duration_start).total_seconds() / 3600
+
+                active_duration[hour] += duration
+
+        # Calculate consumption (active + standby)
+        standby_duration = 1 - active_duration.clip(0, 1)
+        device_consumption = (active_duration * active_power + standby_duration * standby_power) * num_devices
+        consumption += device_consumption
+
+    return consumption.round(3)
+
+
+def calculate_daily_consumption(hourly_consumption: pd.Series) -> pd.Series:
+    """Convert hourly consumption to daily totals"""
+    return hourly_consumption.resample('d').sum().round(3)
+
+
+# Modified forecast preparation functions
+def prepare_hourly_forecast(location: LocationData,
+                            hourly_consumption: pd.Series,
+                            weather_df: pd.DataFrame) -> pd.DataFrame:
+    """Prepares DataFrame for hourly forecast using actual consumption"""
+    # Align weather data with consumption index
+    weather_df = weather_df.reindex(hourly_consumption.index, method='ffill')
+
     rows = []
     for timestamp, row in weather_df.iterrows():
         rows.append({
@@ -46,40 +107,93 @@ def prepare_hourly_forecast(location: LocationData, consumption: float, weather_
             'radiation_diffuse_horizontal': row['dhi'],
             'latitude': location.latitude,
             'longitude': location.longitude,
-            'average_consumption': consumption,
+            'average_consumption': hourly_consumption[timestamp],
             'time': timestamp,
             'country': location.country
         })
     return pd.DataFrame(rows)
 
 
-def prepare_daily_forecast(location: LocationData, consumption: float, weather_df: pd.DataFrame):
-    """Prepares DataFrame for daily forecast (7 days)"""
-    tz = ZoneInfo(location.timezone)
+def prepare_daily_forecast(location: LocationData,
+                           daily_consumption: pd.Series,
+                           weather_df: pd.DataFrame) -> pd.DataFrame:
+    """Prepares DataFrame for daily forecast using actual consumption"""
+    # Resample weather to daily
+    daily_weather = weather_df.resample('d').mean()
 
-    # Create daily index at noon for the next 7 days
-    start_date = pd.Timestamp.now(tz=tz).normalize() + pd.Timedelta(hours=12)
-    full_index = pd.date_range(start=start_date, periods=7, freq='d', tz=tz)
+    # Align with consumption data
+    daily_weather = daily_weather.reindex(daily_consumption.index, method='ffill')
 
-    # Resample to daily averages
-    daily_df = weather_df.resample('d').mean()
-    daily_df = daily_df.reindex(full_index.normalize(), method='ffill')
-
-    # Build rows from the daily data
     rows = []
-    for timestamp, row in daily_df.iterrows():
+    for timestamp, row in daily_weather.iterrows():
         rows.append({
             'temperature': row['temperature'],
             'radiation_direct_horizontal': row['dni'],
             'radiation_diffuse_horizontal': row['dhi'],
             'latitude': location.latitude,
             'longitude': location.longitude,
-            'average_consumption': consumption,
-            'time': timestamp + pd.Timedelta(hours=12),  # Set to midday
+            'average_consumption': daily_consumption[timestamp],
+            'time': timestamp + pd.Timedelta(hours=12),
             'country': location.country
         })
-
     return pd.DataFrame(rows)
+
+
+# Modified prediction endpoints
+@router.post('/consumption/hourly')
+async def predict_hourly(request: PredictionRequest):
+    # Calculate consumption
+    tz = ZoneInfo(request.location.timezone)
+    hourly_consumption = calculate_hourly_consumption(
+        request.devices,
+        request.start_date,
+        tz
+    )
+
+    # Get weather data
+    hourly_weather = get_hourly_weather_data(request.location)
+    weather_parsed = parse_hourly_response(hourly_weather, request.location.timezone)
+    weather_full = calculate_radiation(
+        SolarPanelData(location=request.location, tilt=30, orientation=180),
+        weather_parsed
+    )
+
+    # Make predictions
+    df_forecast = prepare_hourly_forecast(
+        request.location,
+        hourly_consumption,
+        weather_full
+    )
+    return make_predictions(df_forecast)
+
+
+@router.post('/consumption/daily')
+async def predict_daily(request: PredictionRequest):
+    # First calculate hourly to aggregate to daily
+    tz = ZoneInfo(request.location.timezone)
+    hourly_consumption = calculate_hourly_consumption(
+        request.devices,
+        request.start_date,
+        tz,
+        hours=7 * 24  # 7 days
+    )
+    daily_consumption = calculate_daily_consumption(hourly_consumption)
+
+    # Get weather data
+    daily_weather = get_daily_weather_data(request.location)
+    weather_parsed = parse_daily_response(daily_weather, request.location.timezone)
+    weather_full = calculate_radiation(
+        SolarPanelData(location=request.location, tilt=30, orientation=180),
+        weather_parsed
+    )
+
+    # Make predictions
+    df_forecast = prepare_daily_forecast(
+        request.location,
+        daily_consumption,
+        weather_full
+    )
+    return make_predictions(df_forecast)
 
 def predict_consumption_hourly(location: LocationData, consumption: float):
     """Predict consumption for 48-hour hourly forecast"""
@@ -141,20 +255,6 @@ def make_predictions(df_forecast: pd.DataFrame):
         for i, pred in enumerate(predictions)
     }
 
-    return json.dumps({"energy_output": energy_output})
+    return {"energy_output": energy_output}
 
 
-# [Keep existing 5-day prediction code if needed for legacy support]
-
-# Updated test example
-location = LocationData(latitude=50.503887, longitude=4.469936, country='Belgium',
-                        altitude=123, name='Belgium', timezone='Europe/Brussels')
-consumption = 2.3
-
-# Test hourly prediction
-hourly_pred = predict_consumption_hourly(location, consumption)
-print("Hourly Prediction:", hourly_pred)
-
-# Test daily prediction
-daily_pred = predict_consumption_daily(location, consumption)
-print("Daily Prediction:", daily_pred)

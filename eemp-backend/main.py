@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from pvlib.pvsystem import retrieve_sam
 from router_solar import router as router_solar
 from router_weather import router as router_weather
+from router_predictions import router as router_predictions
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -17,6 +18,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.include_router(router_solar)
 app.include_router(router_weather)
+app.include_router(router_predictions)
 
 
 if __name__ == "__main__":
