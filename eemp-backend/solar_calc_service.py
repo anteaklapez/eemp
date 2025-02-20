@@ -1,9 +1,11 @@
+from pvlib import iotools, solarposition
 from pvlib.pvsystem import PVSystem, Array, FixedMount
 from pvlib.modelchain import ModelChain
 from pvlib.location import Location
 from pvlib.temperature import TEMPERATURE_MODEL_PARAMETERS
 from pvlib.iotools import get_pvgis_tmy
 from pvlib.solarposition import get_solarposition
+from pvlib.irradiance import disc
 import pandas as pd
 from solar_models import SolarPanelData
 from fastapi import Request, HTTPException
@@ -17,15 +19,26 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-async def calculate_energy(
-        request: Request,
-        solar_panel_data: SolarPanelData,
-        weather_data: pd.DataFrame
-) -> pd.Series:
+async def calculate_energy(request: Request, solar_panel_data: SolarPanelData, weather_data: pd.DataFrame) -> pd.Series:
+    """
+    Updated to handle different time resolutions
+    """
+    # Ensure numeric types
+    weather_data = weather_data.apply(pd.to_numeric, errors='coerce')
+
+    # Handle different time resolutions
+    if pd.infer_freq(weather_data.index) in ['h', 'd']:
+        weather_data = weather_data.asfreq('h').ffill()
+    """
+    Calculate energy output using PV system modeling.
+    Ensures non-negative energy values and handles edge cases.
+    """
+    # Extract module and inverter datasets
     sandia_modules = request.app.state.sandia_modules
     cec_modules = request.app.state.cec_modules
     cec_inverters = request.app.state.cec_inverters
 
+    # Define location
     location = Location(
         latitude=solar_panel_data.location.latitude,
         longitude=solar_panel_data.location.longitude,
@@ -33,6 +46,7 @@ async def calculate_energy(
         tz=solar_panel_data.location.timezone,
     )
 
+    # Get module parameters
     if solar_panel_data.custom_solar_module:
         module_parameters = solar_panel_data.custom_solar_module.model_dump(exclude={'name'})
     else:
@@ -40,29 +54,32 @@ async def calculate_energy(
         if module_parameters is None:
             module_parameters = cec_modules.get(solar_panel_data.module_name)
 
+    # Validate module parameters
     if isinstance(module_parameters, pd.Series):
         module_parameters = module_parameters.to_dict()
-
-    if module_parameters is None or (hasattr(module_parameters, "empty") and module_parameters.empty):
+    if not module_parameters or (hasattr(module_parameters, "empty") and module_parameters.empty):
         raise ValueError(f"Module '{solar_panel_data.module_name}' not found or is empty in datasets.")
 
+    # Get inverter parameters
     if solar_panel_data.custom_inverter:
         inverter_parameters = solar_panel_data.custom_inverter.model_dump(exclude={'name'})
     else:
         inverter_parameters = cec_inverters.get(solar_panel_data.inverter_name)
 
+    # Validate inverter parameters
     if isinstance(inverter_parameters, pd.Series):
         inverter_parameters = inverter_parameters.to_dict()
-
-    if inverter_parameters is None or (hasattr(inverter_parameters, "empty") and inverter_parameters.empty):
+    if not inverter_parameters or (hasattr(inverter_parameters, "empty") and inverter_parameters.empty):
         raise ValueError(f"Inverter '{solar_panel_data.inverter_name}' not found or is empty in datasets.")
 
+    # Get temperature model parameters
     temperature_params = (
         solar_panel_data.custom_temp_model_params.model_dump()
         if solar_panel_data.custom_temp_model_params
         else TEMPERATURE_MODEL_PARAMETERS['sapm']['open_rack_glass_glass']
     )
 
+    # Define PV system
     system = PVSystem(
         arrays=[Array(
             mount=FixedMount(
@@ -75,14 +92,19 @@ async def calculate_energy(
         inverter_parameters=inverter_parameters
     )
 
+    # Create ModelChain
     mc = ModelChain(system, location, aoi_model='physical', spectral_model='no_loss')
 
+    # Ensure weather data is in the correct timezone
     weather_data = weather_data.tz_convert(solar_panel_data.location.timezone)
 
+    # Run the model
     mc.run_model(weather_data)
 
-    energy_output = pd.Series(mc.results.ac.fillna(0).round(2).squeeze(), name="energy_output")
+    # Extract and clean energy output
+    energy_output = pd.Series(mc.results.ac.fillna(0).clip(lower=0).round(2).squeeze(), name="energy_output")
 
+    # Format index to ISO 8601 with timezone
     energy_output.index = energy_output.index.strftime("%Y-%m-%dT%H:%M:%S%z")
 
     return energy_output
@@ -196,12 +218,24 @@ async def calculate_energy_with_tmy(
     return combined_monthly
 
 
-def get_historical_irradiance(solar_panel_data):
+# Helper function: Get solar declination (for max solar elevation)
+def get_solar_declination(day_of_year_array: np.ndarray) -> np.ndarray:
+    """Calculate solar declination for given day of year."""
+    return 23.44 * np.sin(np.radians((360 / 365) * (day_of_year_array - 81)))
+
+# Helper function: Get max solar elevation
+def get_max_solar_elevation_vectorized(latitude: float, day_of_year_array: np.ndarray) -> np.ndarray:
+    """Calculate max solar elevation for given latitude and day of year."""
+    declination = get_solar_declination(day_of_year_array)
+    return 90 - np.abs(latitude - declination)
+
+# Fetch historical PVGIS data
+def get_historical_irradiance(solar_panel_data) -> pd.DataFrame:
     """
     Fetch historical PVGIS solar irradiance data from 2013-2023.
     Returns a DataFrame indexed by (month, day, hour) with historical irradiance.
     """
-    pvgis_results, _, _ = pvlib.iotools.get_pvgis_hourly(
+    pvgis_results, _, _ = iotools.get_pvgis_hourly(
         latitude=solar_panel_data.location.latitude,
         longitude=solar_panel_data.location.longitude,
         start=2013,
@@ -213,6 +247,7 @@ def get_historical_irradiance(solar_panel_data):
         map_variables=True
     )
 
+    # Add month, day, hour for grouping
     idx = pvgis_results.index
     pvgis_results = pvgis_results.assign(
         month=idx.month,
@@ -220,6 +255,7 @@ def get_historical_irradiance(solar_panel_data):
         hour=idx.hour
     )
 
+    # Calculate median irradiance for each time of year
     irradiance_median = (
         pvgis_results.groupby(["month", "day", "hour"])[["poa_direct", "poa_sky_diffuse", "poa_ground_diffuse"]]
         .median()
@@ -227,39 +263,31 @@ def get_historical_irradiance(solar_panel_data):
     )
     return irradiance_median
 
-
-def match_irradiance_to_weather(weather_df, irradiance_median):
+# Match historical irradiance to weather data
+def match_irradiance_to_weather(weather_df: pd.DataFrame, irradiance_median: pd.DataFrame) -> pd.DataFrame:
     """
-    Matches weather data in 2025 with median historical irradiance (2013-2023)
-    by merging on month, day, and hour.
+    Matches weather data with median historical irradiance by merging on month, day, and hour.
     """
     idx = weather_df.index
-    weather_df = weather_df.copy()  # To avoid modifying the original
+    weather_df = weather_df.copy()  # Avoid modifying the original
     weather_df = weather_df.assign(
         month=idx.month,
         day=idx.day,
         hour=idx.hour
     )
 
+    # Merge with historical irradiance
     weather_df = weather_df.reset_index().merge(
         irradiance_median, on=["month", "day", "hour"], how="left"
     )
 
+    # Restore datetime index
     weather_df.set_index("datetime", inplace=True)
     weather_df.drop(columns=["month", "day", "hour"], inplace=True)
     return weather_df
 
-
-def get_solar_declination(day_of_year_array):
-    return 23.44 * np.sin(np.radians((360 / 365) * (day_of_year_array + 10)))
-
-
-def get_max_solar_elevation_vectorized(latitude, day_of_year_array):
-    declination = get_solar_declination(day_of_year_array)
-    return 90 - np.abs(latitude - declination)
-
-
-def calculate_radiation(solar_panel_data, weather_df):
+# Main function: Calculate radiation components
+def calculate_radiation(solar_panel_data, weather_df: pd.DataFrame) -> pd.DataFrame:
     """
     Calculates irradiance values (GHI, DHI, DNI) based on historical PVGIS data,
     matching it to the provided weather dataset and adjusting for cloud cover.
@@ -268,58 +296,56 @@ def calculate_radiation(solar_panel_data, weather_df):
     # Ensure orientation is set
     if solar_panel_data.orientation is None:
         solar_panel_data.orientation = 180.0 if solar_panel_data.location.latitude > 0 else 0.0
-        print(
-            f"✅ Auto-set orientation to {solar_panel_data.orientation}° based on latitude {solar_panel_data.location.latitude}")
+        print(f"✅ Auto-set orientation to {solar_panel_data.orientation}° based on latitude {solar_panel_data.location.latitude}")
 
+    if 'cloud_cover' not in weather_df.columns:
+        weather_df['cloud_cover'] = 0
+
+    # Fetch and match historical irradiance
     irradiance_median = get_historical_irradiance(solar_panel_data)
     weather_df = match_irradiance_to_weather(weather_df, irradiance_median)
 
-    if "solar_elevation" not in weather_df.columns:
-        solpos = get_solarposition(
-            time=weather_df.index,
-            latitude=solar_panel_data.location.latitude,
-            longitude=solar_panel_data.location.longitude,
-            altitude=solar_panel_data.location.altitude
-        )
-        weather_df["solar_elevation"] = solpos["elevation"]
+    # Calculate solar position
+    solpos = solarposition.get_solarposition(
+        time=weather_df.index,
+        latitude=solar_panel_data.location.latitude,
+        longitude=solar_panel_data.location.longitude,
+        altitude=solar_panel_data.location.altitude
+    )
+    weather_df["solar_elevation"] = solpos["elevation"]
+    weather_df["solar_zenith"] = solpos["zenith"]
 
+    # Calculate max solar elevation
     day_of_year = weather_df.index.dayofyear.values
-    max_solar_elevation = get_max_solar_elevation_vectorized(solar_panel_data.location.latitude, day_of_year)
-    weather_df["max_solar_elevation"] = max_solar_elevation
+    weather_df["max_solar_elevation"] = get_max_solar_elevation_vectorized(
+        solar_panel_data.location.latitude, day_of_year
+    )
 
-    weather_df["solar_zenith"] = 90 - weather_df["solar_elevation"]
-    weather_df["solar_zenith_cap"] = 90 - weather_df["max_solar_elevation"]
+    # Clip solar zenith to avoid extreme values
+    weather_df["solar_zenith"] = weather_df["solar_zenith"].clip(lower=0, upper=90)
 
-    weather_df["solar_zenith"] = weather_df["solar_zenith"].clip(lower=0, upper=weather_df["solar_zenith_cap"])
-
-    weather_df["poa_global"] = (weather_df["poa_direct"] +
-                                weather_df["poa_sky_diffuse"] +
-                                weather_df["poa_ground_diffuse"]).clip(lower=0).fillna(0)
-
-    weather_df["dhi"] = (weather_df["poa_sky_diffuse"] + weather_df["poa_ground_diffuse"]).clip(lower=0).fillna(0)
-
+    # Convert POA irradiance to horizontal components
     cos_zenith = np.cos(np.radians(weather_df["solar_zenith"]))
-    cos_zenith = np.maximum(cos_zenith, 0.05)  # avoid division by zero
+    weather_df["dni"] = weather_df["poa_direct"] / cos_zenith
+    weather_df["dhi"] = weather_df["poa_sky_diffuse"] + weather_df["poa_ground_diffuse"]
 
+    # Adjust for cloud cover
     cloud_factor = weather_df["cloud_cover"] / 100  # 0 to 1
-    dni_factor = np.exp(-cloud_factor * 3)  # exponential decay
+    weather_df["dni"] *= np.exp(-cloud_factor * 3)  # Exponential decay
+    weather_df["dhi"] *= (1 + cloud_factor * 0.6)  # Increase diffuse under clouds
 
-    weather_df["dni"] = (weather_df["poa_direct"] / cos_zenith) * dni_factor
-    weather_df.loc[weather_df["solar_elevation"] <= 5, "dni"] = 0
-    weather_df["dni"] = weather_df["dni"].clip(lower=0).fillna(0)
-
-    dhi_factor = 1 + (cloud_factor * 0.6)
-    weather_df["dhi"] *= dhi_factor
-    weather_df["dhi"] = weather_df["dhi"].clip(lower=0).fillna(0)
-
+    # Calculate GHI
     weather_df["ghi"] = (weather_df["dni"] * cos_zenith) + weather_df["dhi"]
-    weather_df["ghi"] = weather_df["ghi"].clip(lower=0).fillna(0)
 
-    weather_df.fillna(0, inplace=True)
+    # Nighttime handling
+    mask_night = weather_df["solar_elevation"] <= 0
+    weather_df.loc[mask_night, ["dni", "dhi", "ghi"]] = 0
 
-    cols_to_drop = ["poa_global", "poa_sky_diffuse", "poa_ground_diffuse", "poa_direct",
-                    "solar_elevation", "solar_zenith", "solar_zenith_cap",
-                    "max_solar_elevation", "cloud_cover"]
+    # Cleanup
+    cols_to_drop = [
+        "poa_direct", "poa_sky_diffuse", "poa_ground_diffuse",
+        "solar_elevation", "max_solar_elevation", "cloud_cover"
+    ]
     weather_df.drop(columns=cols_to_drop, inplace=True)
 
-    return weather_df
+    return weather_df[['temperature', 'dni', 'dhi', 'ghi']]
