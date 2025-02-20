@@ -6,7 +6,7 @@ from openweatherapi_service import parse_daily_response, parse_hourly_response
 
 router = APIRouter()
 
-@router.post("/calculate-energy-yearly/")
+@router.post("/production/yearly")
 async def calculate_energy_tmy(request: Request, energy_request: EnergyCalculationRequest):
     """
     Endpoint to calculate energy production using Typical Meteorological Year (TMY) data.
@@ -18,7 +18,7 @@ async def calculate_energy_tmy(request: Request, energy_request: EnergyCalculati
 
     return {"energy_output": energy_output.to_dict()}
 
-@router.post("/calculate-energy-hourly/")
+@router.post("/production/hourly")
 async def calculate_energy_hourly(request: Request, energy_request: EnergyCalculationRequest):
     """
     Endpoint for hourly energy calculations (48-hour forecast)
@@ -37,7 +37,7 @@ async def calculate_energy_hourly(request: Request, energy_request: EnergyCalcul
     return {"energy_output": energy_output}
 
 
-@router.post("/calculate-energy-daily/")
+@router.post("/production/daily")
 async def calculate_energy_daily(request: Request, energy_request: EnergyCalculationRequest):
     """
     Endpoint for daily energy calculations (7-day forecast)
