@@ -7,7 +7,8 @@ class LocationData(BaseModel):
     latitude: float
     longitude: float
     altitude: float
-    timezone: str
+    country: str | None = None
+    timezone: str | None = None
 
 class CustomSolarModule(BaseModel):
     name: str
