@@ -15,6 +15,10 @@
     {
       "name": "Production Devices",
       "icon": "/assets/icons/production-icon.svg"
+    },
+    {
+      "name": "Solar Panel",
+      "icon": "/assets/icons/production-icon.svg"
     }
   ],
   "defaultIcon": "/assets/icons/default-icon.svg"
