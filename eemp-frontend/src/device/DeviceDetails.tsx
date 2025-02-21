@@ -1,8 +1,16 @@
 import React, { useState } from "react";
 import { Line } from "react-chartjs-2";
-import { ChartData } from "chart.js"; // For typed chart data
-import { Box, Typography, ToggleButton, Button } from "@mui/material";
-import { Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material";
+import { ChartData } from "chart.js";
+import {
+  Box,
+  Typography,
+  ToggleButton,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+} from "@mui/material";
 import { useNavigate, useLocation } from "react-router-dom";
 import dayjs from "dayjs";
 import {
@@ -16,6 +24,11 @@ import {
   Legend,
 } from "chart.js";
 
+// Import Material‑UI icons
+import WbSunnyIcon from "@mui/icons-material/WbSunny";
+import NatureIcon from "@mui/icons-material/Nature"; // using Nature icon as an alternative to Eco
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
+
 // Register Chart.js components
 ChartJS.register(
   CategoryScale,
@@ -27,22 +40,18 @@ ChartJS.register(
   Legend
 );
 
-// FactorBox Component
-const FactorBox = ({
-  icon,
-  title,
-  value,
-  description,
-}: {
-  icon: string;
+// FactorBox Component (for External Factors)
+interface FactorBoxProps {
+  icon: React.ReactNode;
   title: string;
   value: string;
   description: string;
-}) => (
+}
+const FactorBox: React.FC<FactorBoxProps> = ({ icon, title, value, description }) => (
   <Box
     sx={{
       backgroundColor: "#F5F5F5",
-      padding: { xs: 1.5, sm: 2 },
+      p: { xs: 1.5, sm: 2 },
       borderRadius: "12px",
       display: "flex",
       flexDirection: "column",
@@ -51,15 +60,40 @@ const FactorBox = ({
       boxSizing: "border-box",
     }}
   >
-    <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-      <Typography fontWeight="bold" sx={{ fontSize: { xs: "14px", sm: "16px" } }}>
-        {icon} <span style={{ color: "#5A8DEE" }}>{title}</span>
-      </Typography>
-      <Typography fontWeight="bold" sx={{ fontSize: { xs: "14px", sm: "16px" } }}>
+    <Box
+      sx={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+      }}
+    >
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        {icon}
+        <Typography
+          variant="subtitle1"
+          sx={{
+            color: "#5A8DEE",
+            fontWeight: "bold",
+            fontSize: { xs: "14px", sm: "16px" },
+          }}
+        >
+          {title}
+        </Typography>
+      </Box>
+      <Typography
+        variant="subtitle1"
+        sx={{
+          fontWeight: "bold",
+          fontSize: { xs: "14px", sm: "16px" },
+        }}
+      >
         {value}
       </Typography>
     </Box>
-    <Typography variant="body2" sx={{ color: "gray", fontSize: { xs: "12px", sm: "14px" } }}>
+    <Typography
+      variant="body2"
+      sx={{ color: "gray", fontSize: { xs: "12px", sm: "14px" } }}
+    >
       {description}
     </Typography>
   </Box>
@@ -72,7 +106,7 @@ const DeviceDetails: React.FC = () => {
   // Retrieve the device from navigation state
   const { device } = (location.state as { device?: any }) || {};
 
-  // Convert stored peak hours strings back to dayjs objects and format them
+  // Format peak hours if available
   const peakHoursStartFormatted = device?.peakHoursStart
     ? dayjs(device.peakHoursStart).format("h:mm A")
     : "";
@@ -80,24 +114,19 @@ const DeviceDetails: React.FC = () => {
     ? dayjs(device.peakHoursEnd).format("h:mm A")
     : "";
 
-  // State to control the remove-dialog
+  // State for the remove-dialog
   const [openRemoveDialog, setOpenRemoveDialog] = useState(false);
 
-  // Compute daily energy consumption based on device data.
-  // Assumes device.powerConsumption and device.duration are strings representing numbers,
-  // and device.unit is either "W" or "kW".
+  // Calculate daily consumption
   let dailyConsumption = 0;
   if (device) {
     const power = parseFloat(device.powerConsumption || "0");
     const duration = parseFloat(device.duration || "0");
-    if (device.unit === "W") {
-      dailyConsumption = (power * duration) / 1000;
-    } else {
-      dailyConsumption = power * duration;
-    }
+    dailyConsumption =
+      device.unit === "W" ? (power * duration) / 1000 : power * duration;
   }
 
-  // Weekly chart: working days (Mon–Fri)
+  // Weekly chart data (e.g., Mon–Fri)
   const computedWeeklyData: ChartData<"line"> = {
     labels: ["Mon", "Tue", "Wed", "Thu", "Fri"],
     datasets: [
@@ -105,14 +134,14 @@ const DeviceDetails: React.FC = () => {
         label: "Energy Consumption (kWh)",
         data: Array(5).fill(dailyConsumption),
         borderColor: "#5A8DEE",
-        backgroundColor: "rgba(90, 141, 238, 0.2)",
+        backgroundColor: "rgba(90,141,238,0.2)",
         tension: 0.4,
-        pointRadius: 5,
+        pointRadius: 6,
       },
     ],
   };
 
-  // Monthly chart: 12 months (each month = 20 working days)
+  // Monthly chart data (12 months; each month = 20 working days)
   const computedMonthlyData: ChartData<"line"> = {
     labels: Array.from({ length: 12 }, (_, i) => `Month ${i + 1}`),
     datasets: [
@@ -120,265 +149,210 @@ const DeviceDetails: React.FC = () => {
         label: "Energy Consumption (kWh)",
         data: Array(12).fill(dailyConsumption * 20),
         borderColor: "#5A8DEE",
-        backgroundColor: "rgba(90, 141, 238, 0.2)",
+        backgroundColor: "rgba(90,141,238,0.2)",
         tension: 0.4,
-        pointRadius: 5,
+        pointRadius: 6,
       },
     ],
   };
 
-  // Last updated: if device.lastUpdated exists, use it; otherwise, use current time.
+  // Last updated
   const lastUpdatedDate = device && device.lastUpdated ? new Date(device.lastUpdated) : new Date();
   const lastUpdatedString = lastUpdatedDate.toLocaleString();
 
   // Handlers for the remove dialog
   const handleOpenRemoveDialog = () => setOpenRemoveDialog(true);
   const handleCloseRemoveDialog = () => setOpenRemoveDialog(false);
-
   const handleConfirmRemove = () => {
-    // Retrieve stored devices
     const storedDevices = JSON.parse(localStorage.getItem("devices") || "[]");
-    // Remove the current device using its unique id
     const updatedDevices = storedDevices.filter((d: any) => d.id !== device.id);
     localStorage.setItem("devices", JSON.stringify(updatedDevices));
     setOpenRemoveDialog(false);
-    // Navigate back to the Device Management screen
     navigate("/management");
   };
 
   return (
-    <Box
-      sx={{
-        width: "100%",
-        minHeight: "100vh",
-        backgroundColor: "#fff",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "flex-start",
-        overflowY: "auto",
-        overflowX: "hidden",
-        p: { xs: 2, sm: 4 },
-        boxSizing: "border-box",
-      }}
-    >
-      {/* Main Card Container */}
-      <Box
-        sx={{
-          width: "100%",
-          maxWidth: 600,
-          backgroundColor: "#fff",
-          borderRadius: "12px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 3,
-          p: { xs: 3, sm: 4 },
-          mb: 4,
-          boxSizing: "border-box",
-        }}
-      >
-        {/* Back Navigation with Device Name */}
-        <Typography
-          variant="h6"
-          fontWeight="bold"
+    // Main container with same width as the Solar Panel page
+    <Box sx={{ p: 3, maxWidth: 600, margin: "0 auto" }}>
+      {/* Device Name & Last Updated */}
+      <Typography variant="h5" gutterBottom sx={{ fontWeight: "bold" }}>
+        {device ? device.name : "Device"}
+      </Typography>
+      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+        Last updated {lastUpdatedString}
+      </Typography>
+
+      {/* Energy Consumption Section */}
+      <Typography variant="h6" sx={{ fontWeight: "bold", mb: 2 }}>
+        Energy Consumption
+      </Typography>
+      <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 2, mb: 2 }}>
+        <ToggleButton
+          value="week"
+          selected={view === "week"}
+          onClick={() => setView("week")}
           sx={{
-            display: "flex",
-            alignItems: "center",
-            gap: 1,
-            fontSize: { xs: "16px", sm: "18px" },
+            textTransform: "none",
+            width: 42,
+            height: 42,
+            borderRadius: "50%",
+            fontSize: "16px",
+            fontWeight: "bold",
+            backgroundColor: view === "week" ? "#6B97A4" : "#F5F5F5",
+            color: view === "week" ? "#fff" : "#000",
+            border: "none",
+            transition: "background-color 0.2s ease-in-out",
+            "&.Mui-selected": { backgroundColor: "#6B97A4 !important", color: "#fff" },
+            "&:hover": { backgroundColor: "#6B97A4", color: "#fff" },
           }}
         >
-          {device ? device.name : "Bulb"}
-        </Typography>
-
-        {/* Last Updated */}
-        <Typography variant="subtitle2" sx={{ color: "gray", fontSize: { xs: "12px", sm: "14px" } }}>
-          Last updated: {lastUpdatedString}
-        </Typography>
-
-        {/* Section Title */}
-        <Typography variant="h6" fontWeight="bold" sx={{ fontSize: { xs: "18px", sm: "20px" } }}>
-          Energy Consumption
-        </Typography>
-
-        {/* Toggle Buttons */}
-        <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>
-          <ToggleButton
-            value="week"
-            selected={view === "week"}
-            onClick={() => setView("week")}
-            sx={{
-              textTransform: "none",
-              width: { xs: 36, sm: 40 },
-              height: { xs: 36, sm: 40 },
-              borderRadius: "50%",
-              fontSize: { xs: "14px", sm: "16px" },
-              fontWeight: "bold",
-              backgroundColor: view === "week" ? "#6B97A4" : "#F5F5F5",
-              color: view === "week" ? "#fff" : "#000",
-              border: "none",
-              transition: "background-color 0.2s ease-in-out",
-              "&.Mui-selected": { backgroundColor: "#6B97A4 !important", color: "#fff" },
-              "&:hover": { backgroundColor: "#6B97A4", color: "#fff" },
-            }}
-          >
-            W
-          </ToggleButton>
-
-          <ToggleButton
-            value="month"
-            selected={view === "month"}
-            onClick={() => setView("month")}
-            sx={{
-              textTransform: "none",
-              width: { xs: 36, sm: 40 },
-              height: { xs: 36, sm: 40 },
-              borderRadius: "50%",
-              fontSize: { xs: "14px", sm: "16px" },
-              fontWeight: "bold",
-              backgroundColor: view === "month" ? "#6B97A4" : "#F5F5F5",
-              color: view === "month" ? "#fff" : "#000",
-              border: "none",
-              transition: "background-color 0.2s ease-in-out",
-              "&.Mui-selected": { backgroundColor: "#6B97A4 !important", color: "#fff" },
-              "&:hover": { backgroundColor: "#6B97A4", color: "#fff" },
-            }}
-          >
-            M
-          </ToggleButton>
-        </Box>
-
-        {/* Chart Container */}
-        <Box sx={{ width: "100%", height: { xs: 200, sm: 300 } }}>
-          <Line
-            data={view === "week" ? computedWeeklyData : computedMonthlyData}
-            options={{
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: { legend: { display: false } },
-              scales: {
-                y: {
-                  beginAtZero: true,
-                  min: 0,
-                  max:
-                    view === "week"
-                      ? dailyConsumption * 1.5
-                      : dailyConsumption * 20 * 1.2,
-                },
+          W
+        </ToggleButton>
+        <ToggleButton
+          value="month"
+          selected={view === "month"}
+          onClick={() => setView("month")}
+          sx={{
+            textTransform: "none",
+            width: 42,
+            height: 42,
+            borderRadius: "50%",
+            fontSize: "16px",
+            fontWeight: "bold",
+            backgroundColor: view === "month" ? "#6B97A4" : "#F5F5F5",
+            color: view === "month" ? "#fff" : "#000",
+            border: "none",
+            transition: "background-color 0.2s ease-in-out",
+            "&.Mui-selected": { backgroundColor: "#6B97A4 !important", color: "#fff" },
+            "&:hover": { backgroundColor: "#6B97A4", color: "#fff" },
+          }}
+        >
+          M
+        </ToggleButton>
+      </Box>
+      <Box sx={{ height: 250, mb: 3 }}>
+        <Line
+          data={view === "week" ? computedWeeklyData : computedMonthlyData}
+          options={{
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              y: {
+                beginAtZero: true,
+                min: 0,
+                max:
+                  view === "week"
+                    ? dailyConsumption * 1.5
+                    : dailyConsumption * 20 * 1.2,
               },
-            }}
-          />
-        </Box>
-
-        {/* Estimated Cost (Styled like your screenshot) */}
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-          <Typography variant="h6" fontWeight="bold" sx={{ fontSize: { xs: "18px", sm: "20px" } }}>
-            Estimated Cost
-          </Typography>
-          <Typography variant="h4" fontWeight="bold" sx={{ fontSize: { xs: "28px", sm: "32px" } }}>
-            9.36 kWh/month
-          </Typography>
-          <Typography variant="body2" sx={{ fontSize: { xs: "12px", sm: "14px" } }}>
-            <span style={{ color: "red" }}>●</span> Peak: 3.6 kWh
-          </Typography>
-          <Typography variant="body2" sx={{ fontSize: { xs: "12px", sm: "14px" } }}>
-            <span style={{ color: "green" }}>●</span> Off-Peak: 5.4 kWh
-          </Typography>
-          <Typography variant="body2" sx={{ fontSize: { xs: "12px", sm: "14px" } }}>
-            <span style={{ color: "gold" }}>●</span> Standby: 0.36 kWh
-          </Typography>
-        </Box>
-
-        {/* External Factors Title */}
-        <Typography variant="h6" fontWeight="bold" sx={{ fontSize: { xs: "18px", sm: "20px" } }}>
-          External Factors
-        </Typography>
-
-        {/* External Factors Boxes */}
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <FactorBox
-            icon="🌤"
-            title="Weather"
-            value="Sunny, 24°C"
-            description="Reduced usage likely due to sunlight."
-          />
-          <FactorBox
-            icon="🍂"
-            title="Season"
-            value="Fall"
-            description="Daylight hours decreasing; increased lighting usage expected."
-          />
-          <FactorBox
-            icon="⏰"
-            title="Peak Hours"
-            value={`${peakHoursStartFormatted} - ${peakHoursEndFormatted}`}
-            description="Consider dimming lights during peak hours to save energy."
-          />
-        </Box>
-
-        {/* Buttons Container */}
-        <Box sx={{ display: "flex", justifyContent: "center", gap: 2, flexWrap: "wrap" }}>
-          <Button
-            variant="contained"
-            onClick={() => navigate(-1)}
-            sx={{
-              flex: 1,
-              backgroundColor: "#000",
-              color: "white",
-              textTransform: "none",
-              p: { xs: "8px 16px", sm: "12px 24px" },
-              borderRadius: "8px",
-              ":hover": { backgroundColor: "#333" },
-            }}
-          >
-            Go Back
-          </Button>
-          <Button
-            variant="contained"
-            onClick={handleOpenRemoveDialog}
-            sx={{
-              flex: 1,
-              backgroundColor: "#000",
-              color: "white",
-              textTransform: "none",
-              p: { xs: "8px 16px", sm: "12px 24px" },
-              borderRadius: "8px",
-              ":hover": { backgroundColor: "#333" },
-            }}
-          >
-            Remove Device
-          </Button>
-        </Box>
+            },
+          }}
+        />
       </Box>
 
-      {/* Confirmation Dialog for Remove */}
+      {/* Estimated Cost Section */}
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 1, mb: 3 }}>
+        <Typography variant="h6" sx={{ fontWeight: "bold", mb: 1 }}>
+          Estimated Cost
+        </Typography>
+        <Typography variant="h4" sx={{ fontWeight: "bold" }}>
+          9.36 kWh/month
+        </Typography>
+        <Typography variant="body2">
+          <span style={{ color: "red" }}>●</span> Peak: 3.6 kWh
+        </Typography>
+        <Typography variant="body2">
+          <span style={{ color: "green" }}>●</span> Off-Peak: 5.4 kWh
+        </Typography>
+        <Typography variant="body2">
+          <span style={{ color: "gold" }}>●</span> Standby: 0.36 kWh
+        </Typography>
+      </Box>
+
+      {/* External Factors */}
+      <Typography variant="h6" sx={{ fontWeight: "bold", mb: 2 }}>
+        External Factors
+      </Typography>
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mb: 3 }}>
+        <FactorBox
+          icon={<WbSunnyIcon sx={{ color: "black" }} />}
+          title="Weather"
+          value="Sunny, 24°C"
+          description="Reduced usage likely due to sunlight."
+        />
+        <FactorBox
+          icon={<NatureIcon sx={{ color: "black" }} />}
+          title="Season"
+          value="Fall"
+          description="Daylight hours decreasing; increased lighting usage expected."
+        />
+        <FactorBox
+          icon={<AccessTimeIcon sx={{ color: "black" }} />}
+          title="Peak Hours"
+          value={`${peakHoursStartFormatted} - ${peakHoursEndFormatted}`}
+          description="Consider dimming lights during peak hours to save energy."
+        />
+      </Box>
+
+      {/* Action Buttons */}
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          gap: 2,
+          flexWrap: "wrap",
+        }}
+      >
+        <Button
+          variant="contained"
+          onClick={() => navigate(-1)}
+          sx={{
+            flex: 1,
+            backgroundColor: "#000",
+            color: "#fff",
+            textTransform: "none",
+            p: { xs: "10px 20px", sm: "14px 28px" },
+            borderRadius: "8px",
+            ":hover": { backgroundColor: "#333" },
+          }}
+        >
+          Go Back
+        </Button>
+        <Button
+          variant="contained"
+          onClick={handleOpenRemoveDialog}
+          sx={{
+            flex: 1,
+            backgroundColor: "#000",
+            color: "#fff",
+            textTransform: "none",
+            p: { xs: "10px 20px", sm: "14px 28px" },
+            borderRadius: "8px",
+            ":hover": { backgroundColor: "#333" },
+          }}
+        >
+          Remove Device
+        </Button>
+      </Box>
+
+      {/* Remove Confirmation Dialog */}
       <Dialog
         open={openRemoveDialog}
         onClose={handleCloseRemoveDialog}
-        slotProps={{
-          paper: {
-            sx: {
-              borderRadius: "16px",
-              p: 2,
-            },
-          },
+        PaperProps={{
+          sx: { borderRadius: 4, textAlign: "center", p: 3 },
         }}
       >
-        <DialogTitle sx={{ textAlign: "center", fontWeight: "bold" }}>
-          Remove {device ? device.name : "Bulb"}?
+        <DialogTitle sx={{ fontWeight: "bold" }}>
+          Remove {device?.name || "Device"}?
         </DialogTitle>
-        <DialogContent sx={{ textAlign: "center" }}>
+        <DialogContent>
           <Typography>
             Are you sure you want to remove this device? This action cannot be undone.
           </Typography>
         </DialogContent>
-        <DialogActions
-          sx={{
-            display: "flex",
-            justifyContent: "center",
-            gap: 2,
-            pb: 2,
-          }}
-        >
+        <DialogActions sx={{ justifyContent: "center", gap: 2 }}>
           <Button
             variant="contained"
             onClick={handleCloseRemoveDialog}

@@ -59,7 +59,7 @@ const DeviceManagement: React.FC = () => {
     localStorage.setItem("rooms", JSON.stringify(rooms));
   }, [rooms]);
 
-  // Combined filtering: by category and by room.
+  // Combined filtering: by category and by room
   const filteredDevices = devices.filter((device) => {
     const categoryMatch = filterCategory === "All" || device.category === filterCategory;
     let roomMatch = true;
@@ -82,9 +82,14 @@ const DeviceManagement: React.FC = () => {
     navigate("/form", { state: { device: deviceToEdit, index } });
   };
 
+  // Navigate to details: if Solar Panel, use dedicated route
   const handleViewDetails = (index: number) => {
     const selectedDevice = devices[index];
-    navigate("/device-details", { state: { device: selectedDevice } });
+    if (selectedDevice.category === "Solar Panel") {
+      navigate(`/solar-panel-management/${selectedDevice.id}`);
+    } else {
+      navigate("/device-details", { state: { device: selectedDevice } });
+    }
   };
 
   const getCategoryIcon = (category: string): string => {
@@ -92,8 +97,7 @@ const DeviceManagement: React.FC = () => {
     return categoryInfo ? categoryInfo.icon : categoriesData.defaultIcon;
   };
 
-  // --- Room (Folder) management using a popup dialog ---
-
+  // Room (Folder) management dialog handlers
   const handleOpenRoomDialog = () => setOpenRoomDialog(true);
   const handleCloseRoomDialog = () => {
     setNewRoomName("");
@@ -113,6 +117,8 @@ const DeviceManagement: React.FC = () => {
   const handleDeleteRoom = (roomId: string) => {
     const updatedRooms = rooms.filter((room) => room.id !== roomId);
     setRooms(updatedRooms);
+
+    // Also remove the room reference from any devices assigned to this room
     const updatedDevices = devices.map((device) =>
       device.room === roomId ? { ...device, room: undefined } : device
     );
@@ -121,15 +127,13 @@ const DeviceManagement: React.FC = () => {
   };
 
   return (
+    // Outer container with same styling as your Solar Panel page
     <Box
       sx={{
-        width: "100%",
-        maxWidth: "600px",
+        p: 3,
+        maxWidth: 600,
         margin: "0 auto",
-        padding: "16px",
-        display: "flex",
-        flexDirection: "column",
-        height: "100vh",
+        boxSizing: "border-box",
         backgroundColor: "#fff",
       }}
     >
@@ -233,7 +237,11 @@ const DeviceManagement: React.FC = () => {
                   sx={{ backgroundColor: "transparent" }}
                 />
               </ListItemAvatar>
-              <ListItemText primary={device.name} secondary={device.category} sx={{ textAlign: "left" }} />
+              <ListItemText
+                primary={device.name}
+                secondary={device.category}
+                sx={{ textAlign: "left" }}
+              />
               <Box>
                 <IconButton
                   edge="end"
@@ -262,18 +270,26 @@ const DeviceManagement: React.FC = () => {
       )}
 
       {/* Bottom Buttons: Add Device and Add Room */}
-      <Box sx={{ display: "flex", justifyContent: "space-between", gap: 2, mt: 2 }}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 2,
+          mt: 6, // increased margin top to push buttons further down
+        }}
+      >
         <Button
           variant="contained"
           onClick={() => navigate("/form")}
           sx={{
-            backgroundColor: "#2C2C2C",
-            color: "white",
+            flex: 1,
+            backgroundColor: "#000",
+            color: "#fff",
             textTransform: "none",
-            py: "12px",
-            px: "24px",
+            fontSize: { xs: "12px", sm: "14px" },
+            p: { xs: "6px 12px", sm: "8px 16px" }, // smaller padding for smaller buttons
             borderRadius: "8px",
-            ":hover": { backgroundColor: "#1F1F1F" },
+            ":hover": { backgroundColor: "#333" },
           }}
         >
           Add Device
@@ -282,13 +298,14 @@ const DeviceManagement: React.FC = () => {
           variant="contained"
           onClick={handleOpenRoomDialog}
           sx={{
-            backgroundColor: "#2C2C2C",
-            color: "white",
+            flex: 1,
+            backgroundColor: "#000",
+            color: "#fff",
             textTransform: "none",
-            py: "12px",
-            px: "24px",
+            fontSize: { xs: "12px", sm: "14px" },
+            p: { xs: "6px 12px", sm: "8px 16px" },
             borderRadius: "8px",
-            ":hover": { backgroundColor: "#1F1F1F" },
+            ":hover": { backgroundColor: "#333" },
           }}
         >
           Add Room
@@ -299,18 +316,11 @@ const DeviceManagement: React.FC = () => {
       <Dialog
         open={openRoomDialog}
         onClose={handleCloseRoomDialog}
-        slotProps={{
-          paper: {
-            sx: {
-              borderRadius: "16px",
-              p: 2,
-            },
-          },
+        PaperProps={{
+          sx: { borderRadius: 4, textAlign: "center", p: 3 },
         }}
       >
-        <DialogTitle sx={{ textAlign: "center", fontWeight: "bold" }}>
-          Add New Room
-        </DialogTitle>
+        <DialogTitle sx={{ fontWeight: "bold" }}>Add New Room</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
@@ -320,7 +330,7 @@ const DeviceManagement: React.FC = () => {
             onChange={(e) => setNewRoomName(e.target.value)}
           />
         </DialogContent>
-        <DialogActions sx={{ justifyContent: "center", gap: 2, pb: 2 }}>
+        <DialogActions sx={{ justifyContent: "center", gap: 2 }}>
           <Button
             variant="contained"
             onClick={handleCloseRoomDialog}

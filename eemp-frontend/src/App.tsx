@@ -18,6 +18,7 @@ import LightbulbIcon from "@mui/icons-material/Lightbulb"; // Import LightbulbIc
 import { CSSTransition, SwitchTransition } from "react-transition-group";
 import LocationAccess from "./device/LocationAccess";
 import DeviceDetails from "./device/DeviceDetails";
+import SolarPanelManagement from "./device/SolarPanelManagement";
 
 declare module "@mui/material/styles" {
     interface PaletteColor {
@@ -95,7 +96,7 @@ const Navigation: React.FC = () => {
                             color: "black",
                         },
                         "& .MuiBottomNavigationAction-label": {
-                            display: getCurrentTab() === 0 ? "block" : "none", // Show label only when selected
+                            display: getCurrentTab() === 0 ? "block" : "none",
                             color: "black",
                         },
                     }}
@@ -114,7 +115,7 @@ const Navigation: React.FC = () => {
                             color: "black",
                         },
                         "& .MuiBottomNavigationAction-label": {
-                            display: getCurrentTab() === 1 ? "block" : "none", // Show label only when selected
+                            display: getCurrentTab() === 1 ? "block" : "none",
                             color: "black",
                         },
                     }}
@@ -133,7 +134,7 @@ const Navigation: React.FC = () => {
                             color: "black",
                         },
                         "& .MuiBottomNavigationAction-label": {
-                            display: getCurrentTab() === 2 ? "block" : "none", // Show label only when selected
+                            display: getCurrentTab() === 2 ? "block" : "none",
                             color: "black",
                         },
                     }}
@@ -177,11 +178,13 @@ const App: React.FC = () => {
                             <Route path="/tips" element={<TipsPage />} />
                             <Route path="/location" element={<LocationAccess />} />
                             <Route path="/device-details" element={<DeviceDetails />} />
+                            <Route path="/solar-panel-management/:id" element={<SolarPanelManagement />} />
                         </Routes>
                     </CSSTransition>
                 </SwitchTransition>
                 {/* Conditionally render the navigation bar */}
-                {location.pathname !== "/" && location.pathname !== "/form" && location.pathname !== "/location" && location.pathname !== "/device-details" && <Navigation />}
+                { !["/", "/form", "/location", "/device-details"].includes(location.pathname) &&
+                  !location.pathname.startsWith("/solar-panel-management") && <Navigation /> }
             </LocalizationProvider>
         </ThemeProvider>
     );
