@@ -2,7 +2,7 @@ import os
 from datetime import datetime
 
 import requests
-from solar_models import LocationData
+from location_models import LocationData
 from dotenv import load_dotenv
 import pandas as pd
 from zoneinfo import ZoneInfo

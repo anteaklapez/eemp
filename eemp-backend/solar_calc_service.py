@@ -4,14 +4,12 @@ from pvlib.modelchain import ModelChain
 from pvlib.location import Location
 from pvlib.temperature import TEMPERATURE_MODEL_PARAMETERS
 from pvlib.iotools import get_pvgis_tmy
-from pvlib.solarposition import get_solarposition
-from pvlib.irradiance import disc
 import pandas as pd
 from solar_models import SolarPanelData
+from location_models import LocationData
 from fastapi import Request, HTTPException
 import logging
 import numpy as np
-import pvlib
 from datetime import datetime
 import asyncio
 
@@ -19,7 +17,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-async def calculate_energy(request: Request, solar_panel_data: SolarPanelData, weather_data: pd.DataFrame) -> pd.Series:
+async def calculate_energy(request: Request, solar_panel_data: SolarPanelData, weather_data: pd.DataFrame, location_data: LocationData) -> pd.Series:
     """
     Updated to handle different time resolutions
     """
@@ -40,10 +38,10 @@ async def calculate_energy(request: Request, solar_panel_data: SolarPanelData, w
 
     # Define location
     location = Location(
-        latitude=solar_panel_data.location.latitude,
-        longitude=solar_panel_data.location.longitude,
-        altitude=solar_panel_data.location.altitude,
-        tz=solar_panel_data.location.timezone,
+        latitude=location_data.latitude,
+        longitude=location_data.longitude,
+        altitude=location_data.altitude,
+        tz=location_data.timezone,
     )
 
     # Get module parameters
@@ -96,7 +94,7 @@ async def calculate_energy(request: Request, solar_panel_data: SolarPanelData, w
     mc = ModelChain(system, location, aoi_model='physical', spectral_model='no_loss')
 
     # Ensure weather data is in the correct timezone
-    weather_data = weather_data.tz_convert(solar_panel_data.location.timezone)
+    weather_data = weather_data.tz_convert(location_data.timezone)
 
     # Run the model
     mc.run_model(weather_data)
@@ -112,7 +110,8 @@ async def calculate_energy(request: Request, solar_panel_data: SolarPanelData, w
 
 async def calculate_energy_with_tmy(
     request: Request,
-    solar_panel_data: SolarPanelData
+    solar_panel_data: SolarPanelData,
+    location_data: LocationData
 ) -> pd.Series:
     """
     Calculate solar energy production using pvlib with TMY data.
@@ -127,11 +126,11 @@ async def calculate_energy_with_tmy(
     start_year = current_year - 15
 
     location = Location(
-        latitude=solar_panel_data.location.latitude,
-        longitude=solar_panel_data.location.longitude,
-        altitude=solar_panel_data.location.altitude,
-        name=solar_panel_data.location.name,
-        tz=solar_panel_data.location.timezone,
+        latitude=location_data.latitude,
+        longitude=location_data.longitude,
+        altitude=location_data.altitude,
+        name=location_data.name,
+        tz=location_data.timezone,
     )
 
     if solar_panel_data.custom_solar_module:
@@ -176,8 +175,8 @@ async def calculate_energy_with_tmy(
         try:
             logger.info(f"Fetching TMY data for year {year}...")
             df, metadata, status, headers = get_pvgis_tmy(
-                latitude=solar_panel_data.location.latitude,
-                longitude=solar_panel_data.location.longitude,
+                latitude=location_data.latitude,
+                longitude=location_data.longitude,
                 outputformat='json',
                 coerce_year=year,
                 usehorizon=True,
@@ -230,14 +229,14 @@ def get_max_solar_elevation_vectorized(latitude: float, day_of_year_array: np.nd
     return 90 - np.abs(latitude - declination)
 
 # Fetch historical PVGIS data
-def get_historical_irradiance(solar_panel_data) -> pd.DataFrame:
+def get_historical_irradiance(solar_panel_data, location) -> pd.DataFrame:
     """
     Fetch historical PVGIS solar irradiance data from 2013-2023.
     Returns a DataFrame indexed by (month, day, hour) with historical irradiance.
     """
     pvgis_results, _, _ = iotools.get_pvgis_hourly(
-        latitude=solar_panel_data.location.latitude,
-        longitude=solar_panel_data.location.longitude,
+        latitude=location.latitude,
+        longitude=location.longitude,
         start=2013,
         end=2023,
         surface_tilt=solar_panel_data.tilt,
@@ -287,7 +286,7 @@ def match_irradiance_to_weather(weather_df: pd.DataFrame, irradiance_median: pd.
     return weather_df
 
 # Main function: Calculate radiation components
-def calculate_radiation(solar_panel_data, weather_df: pd.DataFrame) -> pd.DataFrame:
+def calculate_radiation(solar_panel_data, weather_df: pd.DataFrame, location: LocationData) -> pd.DataFrame:
     """
     Calculates irradiance values (GHI, DHI, DNI) based on historical PVGIS data,
     matching it to the provided weather dataset and adjusting for cloud cover.
@@ -295,22 +294,22 @@ def calculate_radiation(solar_panel_data, weather_df: pd.DataFrame) -> pd.DataFr
     """
     # Ensure orientation is set
     if solar_panel_data.orientation is None:
-        solar_panel_data.orientation = 180.0 if solar_panel_data.location.latitude > 0 else 0.0
-        print(f"✅ Auto-set orientation to {solar_panel_data.orientation}° based on latitude {solar_panel_data.location.latitude}")
+        solar_panel_data.orientation = 180.0 if location.latitude > 0 else 0.0
+        print(f"✅ Auto-set orientation to {solar_panel_data.orientation}° based on latitude {location.latitude}")
 
     if 'cloud_cover' not in weather_df.columns:
         weather_df['cloud_cover'] = 0
 
     # Fetch and match historical irradiance
-    irradiance_median = get_historical_irradiance(solar_panel_data)
+    irradiance_median = get_historical_irradiance(solar_panel_data, location)
     weather_df = match_irradiance_to_weather(weather_df, irradiance_median)
 
     # Calculate solar position
     solpos = solarposition.get_solarposition(
         time=weather_df.index,
-        latitude=solar_panel_data.location.latitude,
-        longitude=solar_panel_data.location.longitude,
-        altitude=solar_panel_data.location.altitude
+        latitude=location.latitude,
+        longitude=location.longitude,
+        altitude=location.altitude
     )
     weather_df["solar_elevation"] = solpos["elevation"]
     weather_df["solar_zenith"] = solpos["zenith"]
@@ -318,7 +317,7 @@ def calculate_radiation(solar_panel_data, weather_df: pd.DataFrame) -> pd.DataFr
     # Calculate max solar elevation
     day_of_year = weather_df.index.dayofyear.values
     weather_df["max_solar_elevation"] = get_max_solar_elevation_vectorized(
-        solar_panel_data.location.latitude, day_of_year
+        location.latitude, day_of_year
     )
 
     # Clip solar zenith to avoid extreme values
