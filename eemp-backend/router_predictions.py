@@ -6,11 +6,12 @@ import pandas as pd
 import xgboost as xgb
 import json
 from redis_service import get_daily_weather_data, get_hourly_weather_data
-from solar_models import LocationData, SolarPanelData
+from solar_models import SolarPanelData
 from openweatherapi_service import parse_hourly_response, parse_daily_response
 from solar_calc_service import calculate_radiation
 from fastapi import APIRouter
 from device_models import Device, PredictionRequest
+from location_models import LocationData
 
 router = APIRouter()
 
@@ -154,8 +155,9 @@ async def predict_hourly(request: PredictionRequest):
     hourly_weather = get_hourly_weather_data(request.location)
     weather_parsed = parse_hourly_response(hourly_weather, request.location.timezone)
     weather_full = calculate_radiation(
-        SolarPanelData(location=request.location, tilt=30, orientation=180),
-        weather_parsed
+        SolarPanelData(tilt=30, orientation=180),
+        weather_parsed,
+        request.location
     )
 
     # Make predictions
@@ -183,8 +185,9 @@ async def predict_daily(request: PredictionRequest):
     daily_weather = get_daily_weather_data(request.location)
     weather_parsed = parse_daily_response(daily_weather, request.location.timezone)
     weather_full = calculate_radiation(
-        SolarPanelData(location=request.location, tilt=30, orientation=180),
-        weather_parsed
+        SolarPanelData(tilt=30, orientation=180),
+        weather_parsed,
+        request.location
     )
 
     # Make predictions
@@ -200,7 +203,7 @@ def predict_consumption_hourly(location: LocationData, consumption: float):
     # Get cached hourly data
     hourly_weather = get_hourly_weather_data(location)
     weather_parsed = parse_hourly_response(hourly_weather, location.timezone)
-    weather_full = calculate_radiation(SolarPanelData(location=location, tilt=30, orientation=180), weather_parsed)
+    weather_full = calculate_radiation(SolarPanelData(tilt=30, orientation=180), weather_parsed, location)
     df_forecast = prepare_hourly_forecast(location, consumption, weather_full)
     return make_predictions(df_forecast)
 
@@ -210,7 +213,7 @@ def predict_consumption_daily(location: LocationData, consumption: float):
     # Get cached daily data
     daily_weather = get_daily_weather_data(location)
     weather_parsed = parse_daily_response(daily_weather, location.timezone)
-    weather_full = calculate_radiation(SolarPanelData(location=location, tilt=30, orientation=180), weather_parsed)
+    weather_full = calculate_radiation(SolarPanelData(tilt=30, orientation=180), weather_parsed, location)
 
     df_forecast = prepare_daily_forecast(location, consumption, weather_full)
     return make_predictions(df_forecast)

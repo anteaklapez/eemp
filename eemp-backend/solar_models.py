@@ -1,14 +1,11 @@
 from pydantic import BaseModel
 from datetime import datetime
 from typing import List, Optional
+from location_models import LocationData
+from device_models import Device
 
-class LocationData(BaseModel):
-    name: str
-    latitude: float
-    longitude: float
-    altitude: float
-    country: str | None = None
-    timezone: str | None = None
+
+
 
 class CustomSolarModule(BaseModel):
     name: str
@@ -52,17 +49,78 @@ class WeatherData(BaseModel):
 class SolarPanelData(BaseModel):
     inverter_name: str | None = None
     module_name: str | None = None
-    location: LocationData
     tilt: float # tilt in degrees
     orientation: float # == azimuth
+    capacity: float | None = None
+    efficiency: float | None = None
+    installation_year: int | None = None
     custom_solar_module: CustomSolarModule | None = None
     custom_inverter: CustomInverter | None = None
     custom_temp_model_params: CustomTempModelParams | None = None
+
+    def __str__(self):
+        return (
+            f"Solar System: {self.module_name or 'Custom Module'}\n"
+            f"Tilt: {self.tilt}°, Orientation: {self.orientation}°\n"
+            f"Capacity: {self.capacity}°, Efficiency: {self.efficiency}%\n"
+            f"Inverter: {self.inverter_name or 'Custom Inverter'}"
+        )
 
 class DateRange(BaseModel):
     start_datetime: datetime
     end_datetime: datetime
 
 class EnergyCalculationRequest(BaseModel):
-    solar_panel_data: SolarPanelData
+    solar_panel_data: Optional[SolarPanelData] = None
+    devices: Optional[List[Device]] = None
+    location: LocationData
     weather_data: Optional[List[WeatherData]] = None  # Optional for partial data
+
+class WeatherDataFull(BaseModel):
+    date: int
+    summary: str
+    max_temp: float
+    min_temp: float
+    cloud_cover: int
+    sunlight_hours: float
+    precipitation: str  # Combined probability and amount
+
+    def __str__(self):
+        date_str = datetime.fromtimestamp(self.date).strftime("%a %b %d")
+        return (
+            f"Weather: {date_str} - {self.summary}\n"
+            f"Max: {self.max_temp}°C, Min: {self.min_temp}°C\n"
+            f"Clouds: {self.cloud_cover}%, Sun: {self.sunlight_hours}h\n"
+            f"Precipitation: {self.precipitation}"
+        )
+
+
+class PromptRequest(BaseModel):
+    solar_panel_data: SolarPanelData
+    devices: List[Device]
+    location: LocationData
+    weather_data: Optional[List[WeatherDataFull]] = None
+
+    def __str__(self):
+        # Format weather data if present
+        weather_str = "\n".join(str(w) for w in self.weather_data) if self.weather_data else "No weather data provided"
+
+        # Format device list
+        devices_str = "\n".join(f"- {device}" for device in self.devices)
+
+        return f"""
+        Energy Optimization Analysis Request
+        ------------------------------------
+        📍 Location: {self.location}
+    
+        ☀️ Solar Panel System:
+        {self.solar_panel_data}
+    
+        🌦️ Weather Forecast:
+        {weather_str}
+    
+        💡 Devices in Use:
+        {devices_str}
+        ------------------------------------
+        """
+

@@ -2,7 +2,7 @@ import redis
 import json
 import hashlib
 from openweatherapi_service import get_weather, get_daily_weather, get_hourly_weather
-from solar_models import LocationData
+from location_models import LocationData
 
 redis_client = redis.StrictRedis(host='localhost', port=6379, decode_responses=True)
 

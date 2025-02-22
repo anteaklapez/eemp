@@ -3,6 +3,7 @@ from pvlib.pvsystem import retrieve_sam
 from router_solar import router as router_solar
 from router_weather import router as router_weather
 from router_predictions import router as router_predictions
+from router_recommendations import router as router_recommendations
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -19,6 +20,7 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(router_solar)
 app.include_router(router_weather)
 app.include_router(router_predictions)
+app.include_router(router_recommendations)
 
 
 if __name__ == "__main__":
