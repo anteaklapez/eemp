@@ -10,8 +10,6 @@ import {
   Typography,
   useTheme,
   Autocomplete,
-  SxProps,
-  Theme,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -19,59 +17,15 @@ import {
 } from "@mui/material";
 import { useNavigate, useLocation } from "react-router-dom";
 import dayjs, { Dayjs } from "dayjs";
-import { FixedSizeList, ListChildComponentProps } from "react-window";
 import categoriesData from "../assets/categories.json";
 import locationsData from "../assets/locations.json";
 import cecModules from "../assets/cec_modules.json";
 import sandiaModules from "../assets/sandia_modules.json";
 import cecInverters from "../assets/cec_inverters.json";
+import SolarPanelForm from "./SolarPanelForm";
 
-// ---------------- Virtualization Helper for Autocomplete ----------------
-const LISTBOX_PADDING = 8; // px
-
-function renderRow(props: ListChildComponentProps) {
-  const { data, index, style } = props;
-  return React.cloneElement(data[index] as React.ReactElement, {
-    style: { ...style, top: (style.top as number) + LISTBOX_PADDING },
-  });
-}
-
-const OuterElementContext = React.createContext({});
-
-const OuterElementType = React.forwardRef<HTMLDivElement>((props, ref) => {
-  const outerProps = React.useContext(OuterElementContext);
-  return <div ref={ref} {...props} {...outerProps} />;
-});
-
-const VirtualizedListboxComponent = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLElement>
->(function VirtualizedListboxComponent(props, ref) {
-  const { children, ...other } = props;
-  const itemData = React.Children.toArray(children);
-  const itemCount = itemData.length;
-  const itemSize = 36;
-  return (
-    <div ref={ref}>
-      <OuterElementContext.Provider value={other}>
-        <FixedSizeList
-          height={Math.min(8 * itemSize, itemCount * itemSize) + 2 * LISTBOX_PADDING}
-          width="100%"
-          itemData={itemData}
-          itemSize={itemSize}
-          itemCount={itemCount}
-          overscanCount={5}
-          outerElementType={OuterElementType}
-        >
-          {renderRow}
-        </FixedSizeList>
-      </OuterElementContext.Provider>
-    </div>
-  );
-});
-
-// ---------------- Types for Custom Solar Panel Data ----------------
-interface CustomSolarPanelData {
+// ---------------- Types ----------------
+export interface CustomSolarPanelData {
   location: {
     name: string;
     latitude: number;
@@ -114,10 +68,9 @@ interface CustomSolarPanelData {
   };
 }
 
-interface FormData {
+export interface FormData {
   id?: number | string;
   category: string;
-  // Generic fields
   name?: string;
   manufacturerModel?: string;
   powerConsumption?: string;
@@ -126,16 +79,14 @@ interface FormData {
   duration?: string;
   peakHoursStart?: Dayjs | null;
   peakHoursEnd?: Dayjs | null;
-  location?: string;
+  location?: string; // for non-solar devices
   environment?: string;
   estimatedCost?: string;
   lastUpdated?: string;
-  // Solar Panel specific fields (standard mode)
   module?: string;
   inverter?: string;
   orientation?: string;
   tilt?: string;
-  // Custom manual solar panel data
   customSolarPanelData?: CustomSolarPanelData;
 }
 
@@ -149,32 +100,72 @@ const DeviceForm: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation() as { state?: LocationState };
 
+  // ---------------- State ----------------
   const [formData, setFormData] = useState<FormData>({
     category: "",
     name: "",
-    manufacturerModel: "",
-    powerConsumption: "",
-    unit: "",
-    frequency: "",
-    duration: "",
-    peakHoursStart: dayjs(),
-    peakHoursEnd: dayjs(),
     location: "",
     environment: "",
-    estimatedCost: "",
+    peakHoursStart: dayjs(),
+    peakHoursEnd: dayjs(),
+    // Default structure for solar panel data
+    customSolarPanelData: {
+      location: {
+        name: "",
+        latitude: 0,
+        longitude: 0,
+        altitude: 0,
+        timezone: "",
+      },
+      tilt: 30,
+      orientation: 180,
+      custom_solar_module: {
+        name: "",
+        pdc0: 0,
+        gamma_pdc: 0,
+        bvoco: 0,
+        bvmpo: 0,
+        impo: 0,
+        vmpo: 0,
+        pmpo: 0,
+        a_c: 0,
+        n_s: 0,
+        t_noct: 0,
+      },
+      custom_inverter: {
+        name: "",
+        pdc0: 0,
+        paco: 0,
+        pdco: 0,
+        vdco: 0,
+        pso: 0,
+        c0: 0,
+        c1: 0,
+        c2: 0,
+        c3: 0,
+      },
+      custom_temp_model_params: {
+        u_c: 0,
+        u_v: 0,
+        eta_m: 0,
+        alpha_absorption: 0,
+      },
+    },
   });
 
+  const [manualEntry, setManualEntry] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [manualEntry, setManualEntry] = useState(false); // toggle manual (advanced) entry mode
-
-  // NEW: state for success popup
   const [openPopup, setOpenPopup] = useState(false);
+  const [openError, setOpenError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  // Merge the two module arrays and memoize the result.
+  // Combine module lists from both sources
   const modulesList = useMemo(() => [...cecModules, ...sandiaModules], []);
 
+  // ---------------- Effects ----------------
   useEffect(() => {
+    // If editing, load device data from location.state
     if (location.state?.device) {
       const device = location.state.device;
       setFormData({
@@ -187,106 +178,296 @@ const DeviceForm: React.FC = () => {
     }
   }, [location.state]);
 
+  useEffect(() => {
+    // If the user’s location is in localStorage, auto-fill the solar panel location.
+    if (formData.category === "Solar Panel") {
+      const savedLocation = localStorage.getItem("userLocation");
+      if (savedLocation) {
+        try {
+          const parsedLocation = JSON.parse(savedLocation);
+          setFormData((prev) => {
+            // Build a default CustomSolarPanelData object:
+            const defaultSolarPanelData: CustomSolarPanelData = {
+              location: { name: "", latitude: 0, longitude: 0, altitude: 0, timezone: "" },
+              tilt: 30,
+              orientation: 180,
+              custom_solar_module: {
+                name: "",
+                pdc0: 0,
+                gamma_pdc: 0,
+                bvoco: 0,
+                bvmpo: 0,
+                impo: 0,
+                vmpo: 0,
+                pmpo: 0,
+                a_c: 0,
+                n_s: 0,
+                t_noct: 0,
+              },
+              custom_inverter: {
+                name: "",
+                pdc0: 0,
+                paco: 0,
+                pdco: 0,
+                vdco: 0,
+                pso: 0,
+                c0: 0,
+                c1: 0,
+                c2: 0,
+                c3: 0,
+              },
+              custom_temp_model_params: {
+                u_c: 0,
+                u_v: 0,
+                eta_m: 0,
+                alpha_absorption: 0,
+              },
+            };
+
+            const currentSolarData = prev.customSolarPanelData
+              ? { ...defaultSolarPanelData, ...prev.customSolarPanelData }
+              : defaultSolarPanelData;
+
+            return {
+              ...prev,
+              customSolarPanelData: {
+                ...currentSolarData,
+                location: {
+                  ...currentSolarData.location,
+                  ...parsedLocation,
+                },
+                tilt: currentSolarData.tilt ?? 30,
+                orientation: currentSolarData.orientation ?? 180,
+                custom_solar_module: {
+                  ...{
+                    name: "",
+                    pdc0: 0,
+                    gamma_pdc: 0,
+                    bvoco: 0,
+                    bvmpo: 0,
+                    impo: 0,
+                    vmpo: 0,
+                    pmpo: 0,
+                    a_c: 0,
+                    n_s: 0,
+                    t_noct: 0,
+                  },
+                  ...currentSolarData.custom_solar_module,
+                },
+                custom_inverter: {
+                  ...{
+                    name: "",
+                    pdc0: 0,
+                    paco: 0,
+                    pdco: 0,
+                    vdco: 0,
+                    pso: 0,
+                    c0: 0,
+                    c1: 0,
+                    c2: 0,
+                    c3: 0,
+                  },
+                  ...currentSolarData.custom_inverter,
+                },
+                custom_temp_model_params: {
+                  ...{
+                    u_c: 0,
+                    u_v: 0,
+                    eta_m: 0,
+                    alpha_absorption: 0,
+                  },
+                  ...currentSolarData.custom_temp_model_params,
+                },
+              },
+            };
+          });
+        } catch (err) {
+          console.error("Error parsing userLocation from localStorage:", err);
+        }
+      }
+    }
+  }, [formData.category]);
+
+  // ---------------- Handlers ----------------
   const handleChange = (field: keyof FormData, value: any) => {
     setFormData({ ...formData, [field]: value });
   };
 
-  // Helper to update nested customSolarPanelData fields
-  const handleCustomChange = (fieldPath: string, value: any) => {
-    setFormData((prev) => {
-      const custom = {
-        ...(prev.customSolarPanelData || {
-          location: { name: "", latitude: 0, longitude: 0, altitude: 0, timezone: "" },
-          tilt: 30,
-          orientation: 180,
-          custom_solar_module: {
-            name: "",
-            pdc0: 0,
-            gamma_pdc: 0,
-            bvoco: 0,
-            bvmpo: 0,
-            impo: 0,
-            vmpo: 0,
-            pmpo: 0,
-            a_c: 0,
-            n_s: 0,
-            t_noct: 0,
-          },
-          custom_inverter: {
-            name: "",
-            pdc0: 0,
-            paco: 0,
-            pdco: 0,
-            vdco: 0,
-            pso: 0,
-            c0: 0,
-            c1: 0,
-            c2: 0,
-            c3: 0,
-          },
-          custom_temp_model_params: {
-            u_c: 0,
-            u_v: 0,
-            eta_m: 0,
-            alpha_absorption: 0,
-          },
-        }),
-      };
-      const keys = fieldPath.split(".");
-      let obj: any = custom;
-      for (let i = 0; i < keys.length - 1; i++) {
-        if (!obj[keys[i]]) {
-          obj[keys[i]] = {};
+  // Updated validation for Solar Panels with detailed console logging
+const validateSolarFields = (): boolean => {
+  if (!manualEntry) {
+    // Standard solar panel form
+    const missingFields: string[] = [];
+
+    // Remove environment if you don't need it for solar panel
+    if (!formData.name?.trim()) missingFields.push("Name");
+    if (!formData.module?.trim()) missingFields.push("Module");
+    if (!formData.inverter?.trim()) missingFields.push("Inverter");
+
+    if (missingFields.length > 0) {
+      console.error("Missing required fields for solar panel:", missingFields.join(", "));
+      setErrorMessage("Please fill out all required fields for the solar panel.");
+      setOpenError(true);
+      return false;
+    }
+  } else {
+    // Manual solar panel form: check all fields from your custom form
+    const missingManualFields: string[] = [];
+
+    const customData = formData.customSolarPanelData;
+    if (!customData) {
+      console.error("All manual fields are missing.");
+      setErrorMessage("Please fill out all required fields for manual solar panel entry.");
+      setOpenError(true);
+      return false;
+    }
+
+    // 1) Location checks
+    if (!customData.location.name.trim()) missingManualFields.push("Location Name");
+    if (customData.location.latitude == null) missingManualFields.push("Latitude");
+    if (customData.location.longitude == null) missingManualFields.push("Longitude");
+    if (customData.location.altitude == null) missingManualFields.push("Altitude");
+    if (!customData.location.timezone.trim()) missingManualFields.push("Timezone");
+
+    // 2) System Parameters
+    // We allow 0, so we only check for null/undefined
+    if (customData.tilt == null) missingManualFields.push("Tilt");
+    if (customData.orientation == null) missingManualFields.push("Orientation");
+
+    // 3) Custom Solar Module
+    const moduleData = customData.custom_solar_module;
+    if (!moduleData.name.trim()) missingManualFields.push("Module Name");
+    if (moduleData.pdc0 == null) missingManualFields.push("Pdc0");
+    if (moduleData.gamma_pdc == null) missingManualFields.push("Gamma Pdc");
+    if (moduleData.bvoco == null) missingManualFields.push("BvocO");
+    if (moduleData.bvmpo == null) missingManualFields.push("BvmpO");
+    if (moduleData.impo == null) missingManualFields.push("Impo");
+    if (moduleData.vmpo == null) missingManualFields.push("VmpO");
+    if (moduleData.pmpo == null) missingManualFields.push("PmpO");
+    if (moduleData.a_c == null) missingManualFields.push("A_c");
+    if (moduleData.n_s == null) missingManualFields.push("N_s");
+    if (moduleData.t_noct == null) missingManualFields.push("T_noct");
+
+    // 4) Custom Inverter
+    const inverterData = customData.custom_inverter;
+    if (!inverterData.name.trim()) missingManualFields.push("Inverter Name");
+    if (inverterData.pdc0 == null) missingManualFields.push("Inverter Pdc0");
+    if (inverterData.paco == null) missingManualFields.push("Paco");
+    if (inverterData.pdco == null) missingManualFields.push("Pdco");
+    if (inverterData.vdco == null) missingManualFields.push("Vdco");
+    if (inverterData.pso == null) missingManualFields.push("Pso");
+    if (inverterData.c0 == null) missingManualFields.push("C0");
+    if (inverterData.c1 == null) missingManualFields.push("C1");
+    if (inverterData.c2 == null) missingManualFields.push("C2");
+    if (inverterData.c3 == null) missingManualFields.push("C3");
+
+    // 5) Custom Temperature Model Params
+    const tempData = customData.custom_temp_model_params;
+    if (tempData.u_c == null) missingManualFields.push("U_c");
+    if (tempData.u_v == null) missingManualFields.push("U_v");
+    if (tempData.eta_m == null) missingManualFields.push("Eta_m");
+    if (tempData.alpha_absorption == null) missingManualFields.push("Alpha Absorption");
+
+    // Finally, if any are missing, show error and log
+    if (missingManualFields.length > 0) {
+      console.error(
+        "Missing required fields for manual solar panel entry:",
+        missingManualFields.join(", ")
+      );
+      setErrorMessage("Please fill out all required fields for manual solar panel entry.");
+      setOpenError(true);
+      return false;
+    }
+  }
+
+  return true;
+};
+
+
+  const validateGenericFields = (): boolean => {
+    const requiredFields: (keyof FormData)[] = [
+      "category",
+      "name",
+      "manufacturerModel",
+      "powerConsumption",
+      "unit",
+      "frequency",
+      "duration",
+      "location",
+      "environment",
+      "peakHoursStart",
+      "peakHoursEnd",
+    ];
+
+    for (const field of requiredFields) {
+      if (field === "peakHoursStart" || field === "peakHoursEnd") {
+        const dateValue = formData[field] as Dayjs | null;
+        if (!dateValue || !dateValue.isValid()) {
+          setErrorMessage("Please fill out all required fields.");
+          setOpenError(true);
+          return false;
         }
-        obj = obj[keys[i]];
+      } else {
+        const val = formData[field];
+        if (!val || !String(val).trim()) {
+          setErrorMessage("Please fill out all required fields.");
+          setOpenError(true);
+          return false;
+        }
       }
-      obj[keys[keys.length - 1]] = value;
-      return { ...prev, customSolarPanelData: custom };
-    });
+    }
+    return true;
+  };
+
+  const validateFields = (): boolean => {
+    if (formData.category === "Solar Panel") {
+      return validateSolarFields();
+    }
+    return validateGenericFields();
   };
 
   const handleSubmit = () => {
-    const existingDevices = JSON.parse(localStorage.getItem("devices") || "[]");
+    if (!validateFields()) {
+      return;
+    }
+
     const updatedFormData = {
       ...formData,
       lastUpdated: new Date().toISOString(),
-      // enforce tilt=30 if it's a Solar Panel in standard mode
+      // For standard solar panel form, force tilt=30.0 if not manual entry
       tilt: formData.category === "Solar Panel" && !manualEntry ? "30.0" : formData.tilt,
     };
 
+    // Save to localStorage
+    const existingDevices = JSON.parse(localStorage.getItem("devices") || "[]");
     if (isEditing && editingIndex !== null) {
       existingDevices[editingIndex] = updatedFormData;
     } else {
       updatedFormData.id = Number(`${Date.now()}${Math.floor(Math.random() * 1000)}`);
       existingDevices.push(updatedFormData);
     }
-
     localStorage.setItem("devices", JSON.stringify(existingDevices));
-    // Show the success popup
+
     setOpenPopup(true);
   };
 
-  // Called when user clicks "OK" in the popup
   const handleClosePopup = () => {
     setOpenPopup(false);
     navigate("/management");
   };
 
-  // Determine device name for popup text.
-  let deviceName = formData.name?.trim() || "Device";
-  if (formData.category === "Solar Panel") {
-    // If the category is Solar Panel, we now take the name from the solar panel form.
-    deviceName = formData.name?.trim() || "Solar Panel";
-  }
+  const handleCloseError = () => {
+    setOpenError(false);
+  };
 
+  // Prepare device name for success message
+  const deviceName =
+    formData.name?.trim() || (formData.category === "Solar Panel" ? "Solar Panel" : "Device");
   const popupTitle = isEditing ? `${deviceName} Updated` : `${deviceName} Added`;
   const popupMessage = isEditing
     ? `The ${deviceName.toLowerCase()} has been successfully updated.`
     : `The ${deviceName.toLowerCase()} has been successfully added to your list.`;
 
-  // ---------- Render Functions for each form section ----------
-
-  // 1. Generic Form for non–Solar Panel
   const renderGenericForm = () => (
     <>
       <TextField
@@ -322,7 +503,6 @@ const DeviceForm: React.FC = () => {
           </Select>
         </FormControl>
       </Box>
-
       <FormControl fullWidth sx={{ mb: 2 }}>
         <InputLabel id="frequency-label">Frequency of Usage</InputLabel>
         <Select
@@ -335,7 +515,6 @@ const DeviceForm: React.FC = () => {
           <MenuItem value="Weekly">Weekly</MenuItem>
         </Select>
       </FormControl>
-
       <TextField
         label="Duration (hours)"
         type="number"
@@ -344,7 +523,6 @@ const DeviceForm: React.FC = () => {
         fullWidth
         sx={{ mb: 2 }}
       />
-
       <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
         <TextField
           label="Peak Hours Start"
@@ -361,7 +539,6 @@ const DeviceForm: React.FC = () => {
           fullWidth
         />
       </Box>
-
       <Autocomplete
         options={locationsData.locations}
         getOptionLabel={(option) => option || ""}
@@ -373,7 +550,6 @@ const DeviceForm: React.FC = () => {
         disablePortal
         sx={{ mb: 2 }}
       />
-
       <FormControl fullWidth>
         <InputLabel id="environment-label">Environment</InputLabel>
         <Select
@@ -389,431 +565,20 @@ const DeviceForm: React.FC = () => {
     </>
   );
 
-  // 2. Standard Solar Panel form (non-manual mode)
-  // Updated to include a Name input so that the solar panel gets a name.
-  const renderSolarPanelForm = () => (
-    <Box sx={{ mb: 2 }}>
-      {/* Solar Panel Name Input */}
-      <TextField
-        label="Name"
-        value={formData.name}
-        onChange={(e) => handleChange("name", e.target.value)}
-        fullWidth
-        sx={{ mb: 2 }}
-      />
-      <Typography variant="h6" gutterBottom>
-        Solar Panel Details
-      </Typography>
-
-      <Autocomplete
-        options={modulesList}
-        value={formData.module || ""}
-        onChange={(event, newValue) => handleChange("module", newValue || "")}
-        renderInput={(params) => <TextField {...params} label="Module" variant="outlined" />}
-        ListboxComponent={VirtualizedListboxComponent as React.ComponentType<React.HTMLAttributes<HTMLElement>>}
-        sx={{ mb: 2 }}
-      />
-
-      <Autocomplete
-        options={cecInverters}
-        value={formData.inverter || ""}
-        onChange={(event, newValue) => handleChange("inverter", newValue || "")}
-        renderInput={(params) => <TextField {...params} label="Inverter" variant="outlined" />}
-        ListboxComponent={VirtualizedListboxComponent as React.ComponentType<React.HTMLAttributes<HTMLElement>>}
-        sx={{ mb: 2 }}
-      />
-
-      <TextField
-        label="Orientation (°)"
-        type="number"
-        value={formData.orientation || ""}
-        onChange={(e) => handleChange("orientation", e.target.value)}
-        fullWidth
-        sx={{ mb: 2 }}
-      />
-
-      <TextField
-        label="Tilt (°)"
-        type="number"
-        value="30.0"
-        disabled
-        fullWidth
-        sx={{ mb: 2 }}
-      />
-
-      <Button variant="text" onClick={() => setManualEntry(true)}>
-        Enter Manual Solar Panel Data
-      </Button>
-    </Box>
-  );
-
-  // 3. Custom (manual) Solar Panel form
-  const renderCustomSolarPanelForm = () => {
-    const custom = formData.customSolarPanelData || {
-      location: { name: "", latitude: 0, longitude: 0, altitude: 0, timezone: "" },
-      tilt: 30,
-      orientation: 180,
-      custom_solar_module: {
-        name: "",
-        pdc0: 0,
-        gamma_pdc: 0,
-        bvoco: 0,
-        bvmpo: 0,
-        impo: 0,
-        vmpo: 0,
-        pmpo: 0,
-        a_c: 0,
-        n_s: 0,
-        t_noct: 0,
-      },
-      custom_inverter: {
-        name: "",
-        pdc0: 0,
-        paco: 0,
-        pdco: 0,
-        vdco: 0,
-        pso: 0,
-        c0: 0,
-        c1: 0,
-        c2: 0,
-        c3: 0,
-      },
-      custom_temp_model_params: { u_c: 0, u_v: 0, eta_m: 0, alpha_absorption: 0 },
-    };
-
-    return (
-      <Box sx={{ mb: 2 }}>
-        <Typography variant="h6" gutterBottom>
-          Manual Solar Panel Data Entry
-        </Typography>
-
-        <Typography variant="subtitle1">Location</Typography>
-        <TextField
-          label="Location Name"
-          value={custom.location.name}
-          onChange={(e) => handleCustomChange("location.name", e.target.value)}
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="Latitude"
-          type="number"
-          value={custom.location.latitude}
-          onChange={(e) => handleCustomChange("location.latitude", parseFloat(e.target.value))}
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="Longitude"
-          type="number"
-          value={custom.location.longitude}
-          onChange={(e) => handleCustomChange("location.longitude", parseFloat(e.target.value))}
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="Altitude"
-          type="number"
-          value={custom.location.altitude}
-          onChange={(e) => handleCustomChange("location.altitude", parseFloat(e.target.value))}
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="Timezone"
-          value={custom.location.timezone}
-          onChange={(e) => handleCustomChange("location.timezone", e.target.value)}
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-
-        <Typography variant="subtitle1">System Parameters</Typography>
-        <TextField
-          label="Tilt (°)"
-          type="number"
-          value={custom.tilt}
-          onChange={(e) => handleCustomChange("tilt", parseFloat(e.target.value))}
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="Orientation (°)"
-          type="number"
-          value={custom.orientation}
-          onChange={(e) => handleCustomChange("orientation", parseFloat(e.target.value))}
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-
-        <Typography variant="subtitle1">Custom Solar Module</Typography>
-        <TextField
-          label="Module Name"
-          value={custom.custom_solar_module.name}
-          onChange={(e) => handleCustomChange("custom_solar_module.name", e.target.value)}
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="Pdc0"
-          type="number"
-          value={custom.custom_solar_module.pdc0}
-          onChange={(e) =>
-            handleCustomChange("custom_solar_module.pdc0", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="Gamma Pdc"
-          type="number"
-          value={custom.custom_solar_module.gamma_pdc}
-          onChange={(e) =>
-            handleCustomChange("custom_solar_module.gamma_pdc", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="BvocO"
-          type="number"
-          value={custom.custom_solar_module.bvoco}
-          onChange={(e) =>
-            handleCustomChange("custom_solar_module.bvoco", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="BvmpO"
-          type="number"
-          value={custom.custom_solar_module.bvmpo}
-          onChange={(e) =>
-            handleCustomChange("custom_solar_module.bvmpo", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="Impo"
-          type="number"
-          value={custom.custom_solar_module.impo}
-          onChange={(e) =>
-            handleCustomChange("custom_solar_module.impo", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="VmpO"
-          type="number"
-          value={custom.custom_solar_module.vmpo}
-          onChange={(e) =>
-            handleCustomChange("custom_solar_module.vmpo", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="PmpO"
-          type="number"
-          value={custom.custom_solar_module.pmpo}
-          onChange={(e) =>
-            handleCustomChange("custom_solar_module.pmpo", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="A_c"
-          type="number"
-          value={custom.custom_solar_module.a_c}
-          onChange={(e) =>
-            handleCustomChange("custom_solar_module.a_c", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="N_s"
-          type="number"
-          value={custom.custom_solar_module.n_s}
-          onChange={(e) =>
-            handleCustomChange("custom_solar_module.n_s", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="T_noct"
-          type="number"
-          value={custom.custom_solar_module.t_noct}
-          onChange={(e) =>
-            handleCustomChange("custom_solar_module.t_noct", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-
-        <Typography variant="subtitle1">Custom Inverter</Typography>
-        <TextField
-          label="Inverter Name"
-          value={custom.custom_inverter.name}
-          onChange={(e) => handleCustomChange("custom_inverter.name", e.target.value)}
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="Pdc0"
-          type="number"
-          value={custom.custom_inverter.pdc0}
-          onChange={(e) =>
-            handleCustomChange("custom_inverter.pdc0", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="Paco"
-          type="number"
-          value={custom.custom_inverter.paco}
-          onChange={(e) =>
-            handleCustomChange("custom_inverter.paco", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="Pdco"
-          type="number"
-          value={custom.custom_inverter.pdco}
-          onChange={(e) =>
-            handleCustomChange("custom_inverter.pdco", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="Vdco"
-          type="number"
-          value={custom.custom_inverter.vdco}
-          onChange={(e) =>
-            handleCustomChange("custom_inverter.vdco", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="Pso"
-          type="number"
-          value={custom.custom_inverter.pso}
-          onChange={(e) =>
-            handleCustomChange("custom_inverter.pso", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="C0"
-          type="number"
-          value={custom.custom_inverter.c0}
-          onChange={(e) =>
-            handleCustomChange("custom_inverter.c0", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="C1"
-          type="number"
-          value={custom.custom_inverter.c1}
-          onChange={(e) =>
-            handleCustomChange("custom_inverter.c1", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="C2"
-          type="number"
-          value={custom.custom_inverter.c2}
-          onChange={(e) =>
-            handleCustomChange("custom_inverter.c2", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="C3"
-          type="number"
-          value={custom.custom_inverter.c3}
-          onChange={(e) =>
-            handleCustomChange("custom_inverter.c3", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-
-        <Typography variant="subtitle1">Custom Temperature Model Params</Typography>
-        <TextField
-          label="U_c"
-          type="number"
-          value={custom.custom_temp_model_params.u_c}
-          onChange={(e) =>
-            handleCustomChange("custom_temp_model_params.u_c", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="U_v"
-          type="number"
-          value={custom.custom_temp_model_params.u_v}
-          onChange={(e) =>
-            handleCustomChange("custom_temp_model_params.u_v", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="Eta_m"
-          type="number"
-          value={custom.custom_temp_model_params.eta_m}
-          onChange={(e) =>
-            handleCustomChange("custom_temp_model_params.eta_m", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          label="Alpha Absorption"
-          type="number"
-          value={custom.custom_temp_model_params.alpha_absorption}
-          onChange={(e) =>
-            handleCustomChange("custom_temp_model_params.alpha_absorption", parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-
-        <Button variant="text" onClick={() => setManualEntry(false)}>
-          Back to Standard Solar Panel Form
-        </Button>
-      </Box>
-    );
-  };
-
-  const formContainerSx: SxProps<Theme> = {
-    width: 400,
-    margin: "0 auto",
-    display: "flex",
-    flexDirection: "column",
-    gap: 2,
-    ...(manualEntry ? { minHeight: "80vh" } : {}),
-  };
-
   return (
     <>
-      <Box component="form" noValidate autoComplete="off" sx={formContainerSx}>
+      <Box
+        component="form"
+        noValidate
+        autoComplete="off"
+        sx={{
+          width: 400,
+          margin: "0 auto",
+          display: "flex",
+          flexDirection: "column",
+          gap: 2,
+        }}
+      >
         <Typography variant="h5" sx={{ textAlign: "center" }}>
           {isEditing ? "Edit Device" : "Add New Device"}
         </Typography>
@@ -825,51 +590,106 @@ const DeviceForm: React.FC = () => {
             value={formData.category}
             onChange={(e) => {
               handleChange("category", e.target.value);
+              // Reset manualEntry if category changes away from "Solar Panel"
               if (e.target.value !== "Solar Panel") {
                 setManualEntry(false);
               }
             }}
           >
-            {categoriesData.categories.map((category) => (
-              <MenuItem key={category.name} value={category.name}>
-                {category.name}
+            {categoriesData.categories.map((cat) => (
+              <MenuItem key={cat.name} value={cat.name}>
+                {cat.name}
               </MenuItem>
             ))}
           </Select>
         </FormControl>
 
-        {formData.category === "Solar Panel"
-          ? manualEntry
-            ? renderCustomSolarPanelForm()
-            : renderSolarPanelForm()
-          : renderGenericForm()}
+        {formData.category === "Solar Panel" ? (
+          <SolarPanelForm
+            formData={formData}
+            handleChange={handleChange}
+            handleCustomChange={(path, val) => {
+              // Update nested fields for custom solar panel data
+              setFormData((prev) => {
+                const defaultSolarPanelData: CustomSolarPanelData = {
+                  location: { name: "", latitude: 0, longitude: 0, altitude: 0, timezone: "" },
+                  tilt: 30,
+                  orientation: 180,
+                  custom_solar_module: {
+                    name: "",
+                    pdc0: 0,
+                    gamma_pdc: 0,
+                    bvoco: 0,
+                    bvmpo: 0,
+                    impo: 0,
+                    vmpo: 0,
+                    pmpo: 0,
+                    a_c: 0,
+                    n_s: 0,
+                    t_noct: 0,
+                  },
+                  custom_inverter: {
+                    name: "",
+                    pdc0: 0,
+                    paco: 0,
+                    pdco: 0,
+                    vdco: 0,
+                    pso: 0,
+                    c0: 0,
+                    c1: 0,
+                    c2: 0,
+                    c3: 0,
+                  },
+                  custom_temp_model_params: {
+                    u_c: 0,
+                    u_v: 0,
+                    eta_m: 0,
+                    alpha_absorption: 0,
+                  },
+                };
+
+                const currentSolarData = prev.customSolarPanelData
+                  ? { ...defaultSolarPanelData, ...prev.customSolarPanelData }
+                  : defaultSolarPanelData;
+
+                const segments = path.split(".");
+                let obj: any = currentSolarData;
+                for (let i = 0; i < segments.length - 1; i++) {
+                  if (!obj[segments[i]]) {
+                    obj[segments[i]] = {};
+                  }
+                  obj = obj[segments[i]];
+                }
+                obj[segments[segments.length - 1]] = val;
+                return { ...prev, customSolarPanelData: currentSolarData };
+              });
+            }}
+            manualEntry={manualEntry}
+            setManualEntry={setManualEntry}
+            modulesList={modulesList}
+            invertersList={cecInverters}
+          />
+        ) : (
+          renderGenericForm()
+        )}
 
         <Button
           variant="contained"
           color="primary"
-          sx={{ backgroundColor: theme.palette.primary.darker, mb: manualEntry ? 2 : 0 }}
+          sx={{ backgroundColor: theme.palette.primary.darker }}
           onClick={handleSubmit}
         >
           {isEditing ? "Update" : "Save"}
         </Button>
       </Box>
 
+      {/* Success Dialog */}
       <Dialog
         open={openPopup}
         onClose={handleClosePopup}
-        PaperProps={{
-          sx: {
-            borderRadius: 4,
-            textAlign: "center",
-            px: 4,
-            py: 3,
-            maxWidth: "360px",
-          },
-        }}
+        PaperProps={{ sx: { borderRadius: 4, textAlign: "center", px: 4, py: 3, maxWidth: "360px" } }}
       >
-        <DialogTitle sx={{ p: 0, mb: 1, fontSize: "1.25rem" }}>
-          {popupTitle}
-        </DialogTitle>
+        <DialogTitle sx={{ p: 0, mb: 1, fontSize: "1.25rem" }}>{popupTitle}</DialogTitle>
         <DialogContent sx={{ p: 0, mb: 2 }}>
           <Typography variant="body1">{popupMessage}</Typography>
         </DialogContent>
@@ -877,6 +697,34 @@ const DeviceForm: React.FC = () => {
           <Button
             variant="contained"
             onClick={handleClosePopup}
+            sx={{
+              borderRadius: 2,
+              textTransform: "none",
+              px: 4,
+              backgroundColor: "#000",
+              color: "#fff",
+              "&:hover": { backgroundColor: "#333" },
+            }}
+          >
+            OK
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Error Dialog */}
+      <Dialog
+        open={openError}
+        onClose={handleCloseError}
+        PaperProps={{ sx: { borderRadius: 4, textAlign: "center", px: 4, py: 3, maxWidth: "360px" } }}
+      >
+        <DialogTitle sx={{ p: 0, mb: 1, fontSize: "1.25rem", color: "red" }}>Error</DialogTitle>
+        <DialogContent sx={{ p: 0, mb: 2 }}>
+          <Typography variant="body1">{errorMessage}</Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 0, justifyContent: "center" }}>
+          <Button
+            variant="contained"
+            onClick={handleCloseError}
             sx={{
               borderRadius: 2,
               textTransform: "none",

@@ -10,8 +10,10 @@ import {
     Button,
     TextField,
     Typography,
-    useMediaQuery
+    useMediaQuery,
+    InputAdornment,
 } from "@mui/material";
+import SearchIcon from "@mui/icons-material/Search";
 
 const containerStyle = {
     width: "100%",
@@ -24,8 +26,6 @@ const defaultCenter = {
     lng: -122.4194,
 };
 
-// We'll call this interface "LocationStorageFormat"
-// to clarify it matches your exact desired field names:
 interface LocationStorageFormat {
     name: string;
     latitude: number;
@@ -42,16 +42,13 @@ const LocationAccess = () => {
     const mapRef = useRef<google.maps.Map | null>(null);
     const inputRef = useRef<HTMLInputElement | null>(null);
 
-    // Check if the screen is mobile-sized
     const isMobile = useMediaQuery("(max-width:600px)");
 
-    // Load Google Maps API
     const { isLoaded } = useJsApiLoader({
         googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY!,
-        libraries: ["places"], // Required for Autocomplete
+        libraries: ["places"],
     });
 
-    // Handle clicking on the map
     const handleMapClick = (event: google.maps.MapMouseEvent) => {
         if (event.latLng) {
             const latitude = event.latLng.lat();
@@ -61,8 +58,8 @@ const LocationAccess = () => {
                 name: "Manual Selection",
                 latitude,
                 longitude,
-                altitude: 122,      // Example default
-                timezone: "Unknown" // Example default
+                altitude: 122,
+                timezone: "Unknown",
             };
 
             setSelectedLocation(fallbackLocation);
@@ -73,29 +70,24 @@ const LocationAccess = () => {
         }
     };
 
-    // Load the autocomplete reference
     const handleSearchLoad = (autocomplete: google.maps.places.Autocomplete) => {
         searchBoxRef.current = autocomplete;
     };
 
-    // Handle selecting an option from the Autocomplete dropdown
     const handleSearchPlaceChange = () => {
         if (searchBoxRef.current) {
             const place = searchBoxRef.current.getPlace();
             if (place?.geometry?.location) {
                 const latitude = place.geometry.location.lat();
                 const longitude = place.geometry.location.lng();
-
-                // Use place.formatted_address or fallback to place.name
                 const name = place.formatted_address || place.name || "Selected Place";
 
-                // Hardcode altitude/timezone or retrieve from another source
                 const locationData: LocationStorageFormat = {
                     name,
                     latitude,
                     longitude,
                     altitude: 122,
-                    timezone: "Europe/Zagreb"
+                    timezone: "Europe/Zagreb",
                 };
 
                 setSelectedLocation(locationData);
@@ -107,7 +99,6 @@ const LocationAccess = () => {
         }
     };
 
-    // Handle pressing Enter in the search bar
     const handleEnterPress = (event: React.KeyboardEvent<HTMLInputElement>) => {
         if (event.key === "Enter" && inputRef.current) {
             const searchValue = inputRef.current.value;
@@ -138,12 +129,11 @@ const LocationAccess = () => {
         }
     };
 
-    // Save the selected location to local storage in your exact format
     const saveLocation = () => {
         if (selectedLocation) {
             localStorage.setItem("userLocation", JSON.stringify(selectedLocation));
             alert("Location saved successfully! Redirecting...");
-            window.location.href = "/home"; // Or your actual navigation route
+            window.location.href = "/home";
         } else {
             alert("Please select a location first.");
         }
@@ -196,7 +186,11 @@ const LocationAccess = () => {
                             color: "#fff",
                             padding: isMobile ? "5px 5px" : "10px 10px",
                         },
-                        endAdornment: <span role="img" aria-label="search">🔍</span>,
+                        startAdornment: (
+                            <InputAdornment position="start" sx={{ color: "#fff", marginLeft: "8px" }}>
+                                <SearchIcon />
+                            </InputAdornment>
+                        ),
                     }}
                 />
             </Autocomplete>

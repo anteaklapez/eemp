@@ -1,6 +1,20 @@
 import React from "react";
 import { Box, Typography, Button, Container } from "@mui/material";
+import { styled } from "@mui/material/styles";
 import { useNavigate } from "react-router-dom";
+
+// Create a styled button that scales up on hover
+const EnlargingButton = styled(Button)(({ theme }) => ({
+  position: "relative",
+  padding: "10px 20px",
+  fontSize: "1rem",
+  textTransform: "none",
+  background: "#000", // originally black
+  transition: "transform 0.3s ease-in-out",
+  "&:hover": {
+    transform: "scale(1.1)", // Enlarge the button on hover
+  },
+}));
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
@@ -8,15 +22,15 @@ const LandingPage: React.FC = () => {
   return (
     <Box
       sx={{
-        minHeight: "100%", // Ensure it takes full viewport height
-        minWidth: "100%", // Ensure it takes full viewport width
+        minHeight: "100%", // Full viewport height
+        minWidth: "100%",  // Full viewport width
         background: "linear-gradient(to bottom, #6B97A4 0%, #28393E 100%)",
         display: "flex",
         flexDirection: "column",
-        justifyContent: "flex-start", // Align content closer to the top
-        alignItems: "center", // Center horizontally
+        justifyContent: "flex-start",
+        alignItems: "center",
         color: "white",
-        paddingTop: "10vh", // Optional: Add spacing at the top
+        paddingTop: "10vh",
       }}
     >
       <Container>
@@ -27,7 +41,7 @@ const LandingPage: React.FC = () => {
             color: "black",
             fontWeight: "bold",
             fontSize: "5rem",
-            textAlign: "left", // Align text to the left
+            textAlign: "left",
           }}
         >
           Achieve energy Independence. <br /> Save on costs.
@@ -37,25 +51,20 @@ const LandingPage: React.FC = () => {
           sx={{
             fontSize: "2rem",
             marginBottom: "2rem",
-            textAlign: "left", // Align text to the left
+            textAlign: "left",
           }}
         >
           Input and monitor your household devices, view real-time energy consumption data, and receive personalized
           recommendations to reduce costs and increase efficiency.
         </Typography>
         <Box sx={{ textAlign: "left" }}>
-          <Button
+          <EnlargingButton
             variant="contained"
             color="primary"
-            sx={{
-              padding: "10px 20px",
-              fontSize: "1rem",
-              textTransform: "none",
-            }}
-            onClick={() => navigate("/location")} // Placeholder route
+            onClick={() => navigate("/location")}
           >
             Learn More
-          </Button>
+          </EnlargingButton>
         </Box>
       </Container>
     </Box>
