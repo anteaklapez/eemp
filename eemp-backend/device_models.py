@@ -42,9 +42,10 @@ class StandbyPower(BaseModel):
 class Room(BaseModel):
     roomId: str
     roomName: str
+    roomType: str
 
     def __str__(self):
-        return self.roomName
+        return self.roomType
 
 
 class Device(BaseModel):
@@ -64,7 +65,7 @@ class Device(BaseModel):
             f"Power: {self.powerRating.value}{self.powerRating.unit} | "
             f"Standby: {self.standbyPower.value}{self.standbyPower.unit}\n"
             f"Usage: {self.usagePattern}\n"
-            f"Location: {self.room.roomName}"
+            f"Location: {self.room.roomType}"
         )
 
 
