@@ -19,14 +19,14 @@ import {
   LinearScale,
   PointElement,
   LineElement,
-  Title as ChartTitle,
+  Title,
   Tooltip,
   Legend,
 } from "chart.js";
 
-// Import Material‑UI icons
+// Icons
 import WbSunnyIcon from "@mui/icons-material/WbSunny";
-import NatureIcon from "@mui/icons-material/Nature"; // using Nature icon as an alternative to Eco
+import NatureIcon from "@mui/icons-material/Nature";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 
 // Register Chart.js components
@@ -35,12 +35,11 @@ ChartJS.register(
   LinearScale,
   PointElement,
   LineElement,
-  ChartTitle,
+  Title,
   Tooltip,
   Legend
 );
 
-// FactorBox Component (for External Factors)
 interface FactorBoxProps {
   icon: React.ReactNode;
   title: string;
@@ -103,36 +102,73 @@ const DeviceDetails: React.FC = () => {
   const [view, setView] = useState<"week" | "month">("week");
   const navigate = useNavigate();
   const location = useLocation();
-  // Retrieve the device from navigation state
+
+  // Get device from route state
   const { device } = (location.state as { device?: any }) || {};
 
-  // Format peak hours if available
-  const peakHoursStartFormatted = device?.peakHoursStart
-    ? dayjs(device.peakHoursStart).format("h:mm A")
-    : "";
-  const peakHoursEndFormatted = device?.peakHoursEnd
-    ? dayjs(device.peakHoursEnd).format("h:mm A")
-    : "";
-
-  // State for the remove-dialog
+  // For removing device
   const [openRemoveDialog, setOpenRemoveDialog] = useState(false);
 
-  // Calculate daily consumption
-  let dailyConsumption = 0;
-  if (device) {
-    const power = parseFloat(device.powerConsumption || "0");
-    const duration = parseFloat(device.duration || "0");
-    dailyConsumption =
-      device.unit === "W" ? (power * duration) / 1000 : power * duration;
+  // 7-day labels
+  const weekLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  // 1) Convert power ratings to kW
+  const powerRatingKW =
+    device?.powerRating
+      ? Number(device.powerRating.value) /
+        (device.powerRating.unit === "W" ? 1000 : 1)
+      : 0;
+  const standbyPowerKW =
+    device?.standbyPower
+      ? Number(device.standbyPower.value) /
+        (device.standbyPower.unit === "W" ? 1000 : 1)
+      : 0;
+
+  // 2) Compute daily usage hours for each day
+  let dailyUsageHours: number[] = Array(7).fill(0);
+  if (
+    device?.usagePattern?.usage_times &&
+    Array.isArray(device.usagePattern.usage_times)
+  ) {
+    dailyUsageHours = device.usagePattern.usage_times.map((ut: any) => {
+      const start = dayjs(ut.start);
+      const end = dayjs(ut.end);
+      if (!start.isValid() || !end.isValid()) return 0;
+
+      let hours = end.diff(start, "hour", true);
+      // If negative, assume overnight usage
+      if (hours < 0) {
+        hours += 24;
+      }
+      // Clamp to [0..24]
+      if (hours < 0) hours = 0;
+      if (hours > 24) hours = 24;
+
+      return hours;
+    });
+  } else {
+    dailyUsageHours = Array(7).fill(1);
   }
 
-  // Weekly chart data (e.g., Mon–Fri)
+  // 3) Compute energy breakdown per day
+  const computedDailyBreakdown = dailyUsageHours.map((hours) => {
+    const activeEnergy = powerRatingKW * hours; // kWh
+    const peakEnergy = activeEnergy * 0.4;      // 40% peak
+    const offPeakEnergy = activeEnergy * 0.6;   // 60% off-peak
+    const standbyEnergy = standbyPowerKW * (24 - hours);
+    return { peak: peakEnergy, offPeak: offPeakEnergy, standby: standbyEnergy };
+  });
+
+  // 4) Prepare weekly chart data
+  const computedDailyConsumptions = computedDailyBreakdown.map(
+    (b) => b.peak + b.offPeak + b.standby
+  );
   const computedWeeklyData: ChartData<"line"> = {
-    labels: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+    labels: weekLabels,
     datasets: [
       {
         label: "Energy Consumption (kWh)",
-        data: Array(5).fill(dailyConsumption),
+        data: computedDailyConsumptions,
         borderColor: "#5A8DEE",
         backgroundColor: "rgba(90,141,238,0.2)",
         tension: 0.4,
@@ -141,13 +177,26 @@ const DeviceDetails: React.FC = () => {
     ],
   };
 
-  // Monthly chart data (12 months; each month = 20 working days)
+  // 5) Compute weekly sums & averages for monthly data
+  const sumPeak = computedDailyBreakdown.reduce((acc, b) => acc + b.peak, 0);
+  const sumOffPeak = computedDailyBreakdown.reduce((acc, b) => acc + b.offPeak, 0);
+  const sumStandby = computedDailyBreakdown.reduce((acc, b) => acc + b.standby, 0);
+  const sumTotal = computedDailyConsumptions.reduce((acc, val) => acc + val, 0);
+
+  const averagePeak = sumPeak / 7;
+  const averageOffPeak = sumOffPeak / 7;
+  const averageStandby = sumStandby / 7;
+  const averageTotal = sumTotal / 7;
+
+  // For monthly chart, assume 30 days each month
+  const monthlyLabels = Array.from({ length: 12 }, (_, i) => `Month ${i + 1}`);
+  const monthlyValues = Array(12).fill(+(averageTotal * 30).toFixed(2));
   const computedMonthlyData: ChartData<"line"> = {
-    labels: Array.from({ length: 12 }, (_, i) => `Month ${i + 1}`),
+    labels: monthlyLabels,
     datasets: [
       {
         label: "Energy Consumption (kWh)",
-        data: Array(12).fill(dailyConsumption * 20),
+        data: monthlyValues,
         borderColor: "#5A8DEE",
         backgroundColor: "rgba(90,141,238,0.2)",
         tension: 0.4,
@@ -156,33 +205,88 @@ const DeviceDetails: React.FC = () => {
     ],
   };
 
-  // Last updated
-  const lastUpdatedDate = device && device.lastUpdated ? new Date(device.lastUpdated) : new Date();
+  // 6) Compute the "peak hours on average" across the entire week
+  //    We'll treat each day's usage interval as a start/end in fractional hours (0..24).
+  //    Then we sum & average them to get an overall "average start" and "average end."
+  let avgPeakHoursStart = "";
+  let avgPeakHoursEnd = "";
+
+  if (device?.usagePattern?.usage_times) {
+    let sumStart = 0;
+    let sumEnd = 0;
+    let count = 0;
+
+    device.usagePattern.usage_times.forEach((ut: any) => {
+      const start = dayjs(ut.start);
+      const end = dayjs(ut.end);
+      if (!start.isValid() || !end.isValid()) return;
+
+      // Convert to fractional hour of day (0..24+)
+      let startHour = start.hour() + start.minute() / 60 + start.second() / 3600;
+      let endHour = end.hour() + end.minute() / 60 + end.second() / 3600;
+
+      // If end is before start => overnight => endHour += 24
+      if (end.isBefore(start)) {
+        endHour += 24;
+      }
+
+      sumStart += startHour;
+      sumEnd += endHour;
+      count++;
+    });
+
+    if (count > 0) {
+      let avgStart = sumStart / count; // e.g. 18.5 => 6:30 PM
+      let avgEnd = sumEnd / count;
+      if (avgEnd < avgStart) {
+        avgEnd += 24; // If it crosses midnight
+      }
+
+      // Convert fractional hours back to dayjs time
+      // We'll pick an arbitrary reference date, e.g. 1970-01-01
+      const referenceDate = dayjs("1970-01-01");
+      const avgStartTime = referenceDate.add(avgStart, "hour");
+      const avgEndTime = referenceDate.add(avgEnd, "hour");
+
+      avgPeakHoursStart = avgStartTime.format("h:mm A");
+      avgPeakHoursEnd = avgEndTime.format("h:mm A");
+
+      // If avgEnd > 24 => we might show e.g. "2:00 AM (next day)" logic
+      // For clarity, you can add a note if it extends past 24 hours
+      if (avgEnd >= 24) {
+        // e.g. subtract 24 from display to show the next day's time
+        const nextDayEnd = referenceDate.add(avgEnd - 24, "hour");
+        avgPeakHoursEnd = `${nextDayEnd.format("h:mm A")} (next day)`;
+      }
+    }
+  }
+
+  // Last updated info
+  const lastUpdatedDate = device?.lastUpdated ? new Date(device.lastUpdated) : new Date();
   const lastUpdatedString = lastUpdatedDate.toLocaleString();
 
-  // Handlers for the remove dialog
+  // Remove device logic
   const handleOpenRemoveDialog = () => setOpenRemoveDialog(true);
   const handleCloseRemoveDialog = () => setOpenRemoveDialog(false);
   const handleConfirmRemove = () => {
     const storedDevices = JSON.parse(localStorage.getItem("devices") || "[]");
-    const updatedDevices = storedDevices.filter((d: any) => d.id !== device.id);
+    const updatedDevices = storedDevices.filter((d: any) => d.deviceId !== device.deviceId);
     localStorage.setItem("devices", JSON.stringify(updatedDevices));
     setOpenRemoveDialog(false);
     navigate("/management");
   };
 
   return (
-    // Main container with same width as the Solar Panel page
     <Box sx={{ p: 3, maxWidth: 600, margin: "0 auto" }}>
       {/* Device Name & Last Updated */}
       <Typography variant="h5" gutterBottom sx={{ fontWeight: "bold" }}>
-        {device ? device.name : "Device"}
+        {device?.deviceName ?? device?.name ?? "Device"}
       </Typography>
       <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
         Last updated {lastUpdatedString}
       </Typography>
 
-      {/* Energy Consumption Section */}
+      {/* Energy Consumption */}
       <Typography variant="h6" sx={{ fontWeight: "bold", mb: 2 }}>
         Energy Consumption
       </Typography>
@@ -243,30 +347,30 @@ const DeviceDetails: React.FC = () => {
                 min: 0,
                 max:
                   view === "week"
-                    ? dailyConsumption * 1.5
-                    : dailyConsumption * 20 * 1.2,
+                    ? Math.max(...computedDailyConsumptions, 1) * 1.2
+                    : (averageTotal * 30 || 1) * 1.2,
               },
             },
           }}
         />
       </Box>
 
-      {/* Estimated Cost Section */}
+      {/* Estimated Cost / Breakdown */}
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1, mb: 3 }}>
         <Typography variant="h6" sx={{ fontWeight: "bold", mb: 1 }}>
           Estimated Cost
         </Typography>
         <Typography variant="h4" sx={{ fontWeight: "bold" }}>
-          9.36 kWh/month
+          {(averageTotal * 30).toFixed(2)} kWh/month
         </Typography>
         <Typography variant="body2">
-          <span style={{ color: "red" }}>●</span> Peak: 3.6 kWh
+          <span style={{ color: "red" }}>●</span> Peak: {(averagePeak * 30).toFixed(2)} kWh
         </Typography>
         <Typography variant="body2">
-          <span style={{ color: "green" }}>●</span> Off-Peak: 5.4 kWh
+          <span style={{ color: "green" }}>●</span> Off-Peak: {(averageOffPeak * 30).toFixed(2)} kWh
         </Typography>
         <Typography variant="body2">
-          <span style={{ color: "gold" }}>●</span> Standby: 0.36 kWh
+          <span style={{ color: "gold" }}>●</span> Standby: {(averageStandby * 30).toFixed(2)} kWh
         </Typography>
       </Box>
 
@@ -290,8 +394,12 @@ const DeviceDetails: React.FC = () => {
         <FactorBox
           icon={<AccessTimeIcon sx={{ color: "black" }} />}
           title="Peak Hours"
-          value={`${peakHoursStartFormatted} - ${peakHoursEndFormatted}`}
-          description="Consider dimming lights during peak hours to save energy."
+          value={
+            avgPeakHoursStart && avgPeakHoursEnd
+              ? `${avgPeakHoursStart} - ${avgPeakHoursEnd}`
+              : "N/A"
+          }
+          description="Average usage interval across all days."
         />
       </Box>
 
@@ -321,7 +429,7 @@ const DeviceDetails: React.FC = () => {
         </Button>
         <Button
           variant="contained"
-          onClick={handleOpenRemoveDialog}
+          onClick={() => setOpenRemoveDialog(true)}
           sx={{
             flex: 1,
             backgroundColor: "#000",
@@ -339,13 +447,13 @@ const DeviceDetails: React.FC = () => {
       {/* Remove Confirmation Dialog */}
       <Dialog
         open={openRemoveDialog}
-        onClose={handleCloseRemoveDialog}
+        onClose={() => setOpenRemoveDialog(false)}
         PaperProps={{
           sx: { borderRadius: 4, textAlign: "center", p: 3 },
         }}
       >
         <DialogTitle sx={{ fontWeight: "bold" }}>
-          Remove {device?.name || "Device"}?
+          Remove {device?.deviceName || device?.name || "Device"}?
         </DialogTitle>
         <DialogContent>
           <Typography>
@@ -355,7 +463,7 @@ const DeviceDetails: React.FC = () => {
         <DialogActions sx={{ justifyContent: "center", gap: 2 }}>
           <Button
             variant="contained"
-            onClick={handleCloseRemoveDialog}
+            onClick={() => setOpenRemoveDialog(false)}
             sx={{
               backgroundColor: "#ccc",
               color: "#000",

@@ -30,11 +30,25 @@ interface Room {
   name: string;
 }
 
+// Define the raw device type saved in localStorage.
+// Note: Solar panels are saved with id, name, category while normal devices use deviceId, deviceName, deviceCategory.
+interface RawDevice {
+  id?: number;
+  deviceId?: string;
+  name?: string;
+  deviceName?: string;
+  category?: string;
+  deviceCategory?: string;
+  room?: string | { roomId: string; roomName: string };
+  // other properties are present but we don't need them for display
+}
+
+// Define a unified device type for display
 interface Device {
-  id: number;
+  id: string | number;
   name: string;
   category: string;
-  room?: string; // room id if assigned
+  room?: string;
 }
 
 const DeviceManagement: React.FC = () => {
@@ -46,10 +60,21 @@ const DeviceManagement: React.FC = () => {
   const [newRoomName, setNewRoomName] = useState<string>("");
   const navigate = useNavigate();
 
-  // Load devices and rooms from localStorage on mount
+  // Load devices and rooms from localStorage on mount and transform devices into a unified shape.
   useEffect(() => {
-    const savedDevices: Device[] = JSON.parse(localStorage.getItem("devices") || "[]");
-    setDevices(savedDevices);
+    const rawDevices: RawDevice[] = JSON.parse(localStorage.getItem("devices") || "[]");
+    // Map raw devices to unified structure.
+    const unifiedDevices: Device[] = rawDevices.map((device) => ({
+      id: device.id || device.deviceId || Date.now(), // fallback id if missing
+      name: device.name || device.deviceName || "Unnamed Device",
+      category: device.category || device.deviceCategory || "Unknown",
+      room:
+        typeof device.room === "object"
+          ? device.room.roomId
+          : (device.room as string) || undefined,
+    }));
+    setDevices(unifiedDevices);
+
     const savedRooms: Room[] = JSON.parse(localStorage.getItem("rooms") || "[]");
     setRooms(savedRooms);
   }, []);
@@ -59,7 +84,7 @@ const DeviceManagement: React.FC = () => {
     localStorage.setItem("rooms", JSON.stringify(rooms));
   }, [rooms]);
 
-  // Combined filtering: by category and by room
+  // Combined filtering: by category and by room.
   const filteredDevices = devices.filter((device) => {
     const categoryMatch = filterCategory === "All" || device.category === filterCategory;
     let roomMatch = true;
@@ -71,33 +96,70 @@ const DeviceManagement: React.FC = () => {
     return categoryMatch && roomMatch;
   });
 
-  const handleDelete = (index: number) => {
-    const updatedDevices = devices.filter((_, i) => i !== index);
-    setDevices(updatedDevices);
-    localStorage.setItem("devices", JSON.stringify(updatedDevices));
-  };
-
+  // Updated edit handler: Retrieve full raw device data and pass it to the form.
   const handleEdit = (index: number) => {
-    const deviceToEdit = devices[index];
-    navigate("/form", { state: { device: deviceToEdit, index } });
-  };
-
-  // Navigate to details: if Solar Panel, use dedicated route
-  const handleViewDetails = (index: number) => {
-    const selectedDevice = devices[index];
-    if (selectedDevice.category === "Solar Panel") {
-      navigate(`/solar-panel-management/${selectedDevice.id}`);
-    } else {
-      navigate("/device-details", { state: { device: selectedDevice } });
+    const rawDevices: RawDevice[] = JSON.parse(localStorage.getItem("devices") || "[]");
+    const unifiedDevice = devices[index];
+    const deviceToEdit = rawDevices.find(
+      (device) =>
+        (device.id && device.id === unifiedDevice.id) ||
+        (device.deviceId && device.deviceId === unifiedDevice.id)
+    );
+    if (deviceToEdit) {
+      navigate("/form", { state: { device: deviceToEdit, index } });
     }
   };
+
+  const handleDelete = (index: number) => {
+    // Remove the device from localStorage and update state.
+    const updatedDevices = [...devices];
+    updatedDevices.splice(index, 1);
+    setDevices(updatedDevices);
+
+    // To update the stored devices, retrieve the raw list and filter out the deleted device.
+    const rawDevices: RawDevice[] = JSON.parse(localStorage.getItem("devices") || "[]");
+    const updatedRawDevices = rawDevices.filter((_, i) => i !== index);
+    localStorage.setItem("devices", JSON.stringify(updatedRawDevices));
+  };
+
+  // Navigate to details: if Solar Panel, use dedicated route.
+  // Navigate to details: if Solar Panel, use dedicated route.
+const handleViewDetails = (index: number) => {
+  // 1) Identify the "unified" device you clicked on
+  const selectedUnifiedDevice = devices[index];
+
+  // 2) Retrieve the full raw devices array from localStorage
+  const rawDevices: RawDevice[] = JSON.parse(localStorage.getItem("devices") || "[]");
+
+  // 3) Find the matching raw device (the one that has the same id/deviceId)
+  const rawDevice = rawDevices.find(
+    (d) =>
+      (d.id && d.id === selectedUnifiedDevice.id) ||
+      (d.deviceId && d.deviceId === selectedUnifiedDevice.id)
+  );
+
+  // If not found, you can show a warning or simply return
+  if (!rawDevice) {
+    console.warn("No matching raw device found for:", selectedUnifiedDevice);
+    return;
+  }
+
+  // 4) If it’s a Solar Panel, go to your solar route; otherwise, go to /device-details
+  //    (using the *raw* device so the details page has powerRating, usagePattern, etc.)
+  if (rawDevice.category === "Solar Panel" || rawDevice.deviceCategory === "Solar Panel") {
+    navigate(`/solar-panel-management/${rawDevice.id || rawDevice.deviceId}`);
+  } else {
+    navigate("/device-details", { state: { device: rawDevice } });
+  }
+};
+
 
   const getCategoryIcon = (category: string): string => {
     const categoryInfo = categoriesData.categories.find((item) => item.name === category);
     return categoryInfo ? categoryInfo.icon : categoriesData.defaultIcon;
   };
 
-  // Room (Folder) management dialog handlers
+  // Room (Folder) management dialog handlers.
   const handleOpenRoomDialog = () => setOpenRoomDialog(true);
   const handleCloseRoomDialog = () => {
     setNewRoomName("");
@@ -105,7 +167,7 @@ const DeviceManagement: React.FC = () => {
   };
   const handleSaveRoom = () => {
     if (newRoomName.trim() !== "") {
-      // Create a new room with a unique id (using Date.now())
+      // Create a new room with a unique id.
       const newRoom: Room = { id: Date.now().toString(), name: newRoomName.trim() };
       const updatedRooms = [...rooms, newRoom];
       setRooms(updatedRooms);
@@ -118,16 +180,21 @@ const DeviceManagement: React.FC = () => {
     const updatedRooms = rooms.filter((room) => room.id !== roomId);
     setRooms(updatedRooms);
 
-    // Also remove the room reference from any devices assigned to this room
+    // Also remove the room reference from any devices assigned to this room.
     const updatedDevices = devices.map((device) =>
       device.room === roomId ? { ...device, room: undefined } : device
     );
     setDevices(updatedDevices);
-    localStorage.setItem("devices", JSON.stringify(updatedDevices));
+
+    // Update raw devices in localStorage.
+    const rawDevices: RawDevice[] = JSON.parse(localStorage.getItem("devices") || "[]");
+    const updatedRawDevices = rawDevices.map((device) =>
+      device.room === roomId ? { ...device, room: undefined } : device
+    );
+    localStorage.setItem("devices", JSON.stringify(updatedRawDevices));
   };
 
   return (
-    // Outer container with same styling as your Solar Panel page
     <Box
       sx={{
         p: 3,
@@ -237,11 +304,7 @@ const DeviceManagement: React.FC = () => {
                   sx={{ backgroundColor: "transparent" }}
                 />
               </ListItemAvatar>
-              <ListItemText
-                primary={device.name}
-                secondary={device.category}
-                sx={{ textAlign: "left" }}
-              />
+              <ListItemText primary={device.name} secondary={device.category} sx={{ textAlign: "left" }} />
               <Box>
                 <IconButton
                   edge="end"
@@ -270,14 +333,7 @@ const DeviceManagement: React.FC = () => {
       )}
 
       {/* Bottom Buttons: Add Device and Add Room */}
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 2,
-          mt: 6, // increased margin top to push buttons further down
-        }}
-      >
+      <Box sx={{ display: "flex", justifyContent: "space-between", gap: 2, mt: 6 }}>
         <Button
           variant="contained"
           onClick={() => navigate("/form")}
@@ -287,7 +343,7 @@ const DeviceManagement: React.FC = () => {
             color: "#fff",
             textTransform: "none",
             fontSize: { xs: "12px", sm: "14px" },
-            p: { xs: "6px 12px", sm: "8px 16px" }, // smaller padding for smaller buttons
+            p: { xs: "6px 12px", sm: "8px 16px" },
             borderRadius: "8px",
             ":hover": { backgroundColor: "#333" },
           }}
@@ -316,9 +372,7 @@ const DeviceManagement: React.FC = () => {
       <Dialog
         open={openRoomDialog}
         onClose={handleCloseRoomDialog}
-        PaperProps={{
-          sx: { borderRadius: 4, textAlign: "center", p: 3 },
-        }}
+        PaperProps={{ sx: { borderRadius: 4, textAlign: "center", p: 3 } }}
       >
         <DialogTitle sx={{ fontWeight: "bold" }}>Add New Room</DialogTitle>
         <DialogContent>

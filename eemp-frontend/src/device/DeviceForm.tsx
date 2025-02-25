@@ -9,7 +9,6 @@ import {
   FormControl,
   Typography,
   useTheme,
-  Autocomplete,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -18,10 +17,11 @@ import {
 import { useNavigate, useLocation } from "react-router-dom";
 import dayjs, { Dayjs } from "dayjs";
 import categoriesData from "../assets/categories.json";
-import locationsData from "../assets/locations.json";
+import locationsData from "../assets/locations.json"; // not used directly here
 import cecModules from "../assets/cec_modules.json";
 import sandiaModules from "../assets/sandia_modules.json";
 import cecInverters from "../assets/cec_inverters.json";
+import roomData from "../assets/locations.json"; // Contains the "type" array for room types
 import SolarPanelForm from "./SolarPanelForm";
 
 // ---------------- Types ----------------
@@ -71,6 +71,7 @@ export interface CustomSolarPanelData {
 export interface FormData {
   id?: number | string;
   category: string;
+  // Shared fields (for solar devices)
   name?: string;
   manufacturerModel?: string;
   powerConsumption?: string;
@@ -79,15 +80,28 @@ export interface FormData {
   duration?: string;
   peakHoursStart?: Dayjs | null;
   peakHoursEnd?: Dayjs | null;
-  location?: string; // for non-solar devices
+  location?: string;
   environment?: string;
   estimatedCost?: string;
-  lastUpdated?: string;
   module?: string;
   inverter?: string;
   orientation?: string;
   tilt?: string;
   customSolarPanelData?: CustomSolarPanelData;
+  // Normal device fields (only used if category !== "Solar Panel")
+  powerRatingValue?: string;
+  powerRatingUnit?: string;
+  weekStart?: Dayjs;
+  usageTimes?: { start: Dayjs; end: Dayjs }[];
+  // Energy type dropdown ("AC" or "DC"), default "AC"
+  energyType?: string;
+  standbyPowerValue?: string;
+  standbyPowerUnit?: string;
+  numberOfDevices?: string;
+  // Room information
+  roomName?: string;
+  roomType?: string;
+  roomId?: string;
 }
 
 interface LocationState {
@@ -104,19 +118,22 @@ const DeviceForm: React.FC = () => {
   const [formData, setFormData] = useState<FormData>({
     category: "",
     name: "",
+    manufacturerModel: "",
+    powerConsumption: "",
+    unit: "",
+    frequency: "",
+    duration: "",
     location: "",
     environment: "",
+    estimatedCost: "",
     peakHoursStart: dayjs(),
     peakHoursEnd: dayjs(),
-    // Default structure for solar panel data
+    module: "",
+    inverter: "",
+    orientation: "",
+    tilt: "",
     customSolarPanelData: {
-      location: {
-        name: "",
-        latitude: 0,
-        longitude: 0,
-        altitude: 0,
-        timezone: "",
-      },
+      location: { name: "", latitude: 0, longitude: 0, altitude: 0, timezone: "" },
       tilt: 30,
       orientation: 180,
       custom_solar_module: {
@@ -151,6 +168,20 @@ const DeviceForm: React.FC = () => {
         alpha_absorption: 0,
       },
     },
+    powerRatingValue: "",
+    powerRatingUnit: "W",
+    weekStart: dayjs(),
+    usageTimes: Array.from({ length: 7 }, () => ({
+      start: dayjs().hour(18).minute(0),
+      end: dayjs().hour(23).minute(0),
+    })),
+    energyType: "AC",
+    standbyPowerValue: "",
+    standbyPowerUnit: "W",
+    numberOfDevices: "",
+    roomName: "",
+    roomType: "",
+    roomId: "",
   });
 
   const [manualEntry, setManualEntry] = useState(false);
@@ -165,28 +196,70 @@ const DeviceForm: React.FC = () => {
 
   // ---------------- Effects ----------------
   useEffect(() => {
-    // If editing, load device data from location.state
     if (location.state?.device) {
-      const device = location.state.device;
-      setFormData({
-        ...device,
-        peakHoursStart: device.peakHoursStart ? dayjs(device.peakHoursStart) : null,
-        peakHoursEnd: device.peakHoursEnd ? dayjs(device.peakHoursEnd) : null,
-      });
+      // Cast device as any to access extra properties
+      const device = location.state.device as any;
+      // Use both keys: for solar panels, the stored object has category, for normal devices, deviceCategory
+      if (device.category === "Solar Panel" || device.deviceCategory === "Solar Panel") {
+        setFormData({
+          ...device,
+          // For solar panels we use the same keys already in formData:
+          peakHoursStart: device.peakHoursStart ? dayjs(device.peakHoursStart) : null,
+          peakHoursEnd: device.peakHoursEnd ? dayjs(device.peakHoursEnd) : null,
+          weekStart: device.weekStart ? dayjs(device.weekStart) : dayjs(),
+          usageTimes: device.usageTimes
+            ? device.usageTimes.map((ut: any) => ({
+                start: dayjs(ut.start),
+                end: dayjs(ut.end),
+              }))
+            : Array.from({ length: 7 }, () => ({
+                start: dayjs().hour(18).minute(0),
+                end: dayjs().hour(23).minute(0),
+              })),
+        });
+      } else {
+        // Normal device: map stored properties to our form's fields.
+        setFormData({
+          category: device.deviceCategory,
+          name: device.deviceName,
+          powerRatingValue: device.powerRating?.value?.toString() || "",
+          powerRatingUnit: device.powerRating?.unit || "W",
+          frequency: device.usagePattern?.frequency_value?.toString() || "",
+          weekStart: device.weekStart
+            ? dayjs(device.weekStart)
+            : device.usagePattern?.usage_times?.[0]?.start
+            ? dayjs(device.usagePattern.usage_times[0].start)
+            : dayjs(),
+          usageTimes: device.usagePattern?.usage_times
+            ? device.usagePattern.usage_times.map((ut: any) => ({
+                start: dayjs(ut.start),
+                end: dayjs(ut.end),
+              }))
+            : Array.from({ length: 7 }, () => ({
+                start: dayjs().hour(18).minute(0),
+                end: dayjs().hour(23).minute(0),
+              })),
+          energyType: device.energyType || "AC",
+          standbyPowerValue: device.standbyPower?.value?.toString() || "",
+          standbyPowerUnit: device.standbyPower?.unit || "W",
+          // When updating, do not allow editing the number of devices.
+          roomName: device.room?.roomName || "",
+          roomType: device.room?.roomType || "",
+          roomId: device.room?.roomId || "",
+        });
+      }
       setIsEditing(true);
       setEditingIndex(location.state.index ?? null);
     }
   }, [location.state]);
 
   useEffect(() => {
-    // If the user’s location is in localStorage, auto-fill the solar panel location.
     if (formData.category === "Solar Panel") {
       const savedLocation = localStorage.getItem("userLocation");
       if (savedLocation) {
         try {
           const parsedLocation = JSON.parse(savedLocation);
           setFormData((prev) => {
-            // Build a default CustomSolarPanelData object:
             const defaultSolarPanelData: CustomSolarPanelData = {
               location: { name: "", latitude: 0, longitude: 0, altitude: 0, timezone: "" },
               tilt: 30,
@@ -223,11 +296,9 @@ const DeviceForm: React.FC = () => {
                 alpha_absorption: 0,
               },
             };
-
             const currentSolarData = prev.customSolarPanelData
               ? { ...defaultSolarPanelData, ...prev.customSolarPanelData }
               : defaultSolarPanelData;
-
             return {
               ...prev,
               customSolarPanelData: {
@@ -293,161 +364,348 @@ const DeviceForm: React.FC = () => {
     setFormData({ ...formData, [field]: value });
   };
 
-  // Updated validation for Solar Panels with detailed console logging
-const validateSolarFields = (): boolean => {
-  if (!manualEntry) {
-    // Standard solar panel form
-    const missingFields: string[] = [];
-
-    // Remove environment if you don't need it for solar panel
-    if (!formData.name?.trim()) missingFields.push("Name");
-    if (!formData.module?.trim()) missingFields.push("Module");
-    if (!formData.inverter?.trim()) missingFields.push("Inverter");
-
-    if (missingFields.length > 0) {
-      console.error("Missing required fields for solar panel:", missingFields.join(", "));
-      setErrorMessage("Please fill out all required fields for the solar panel.");
-      setOpenError(true);
-      return false;
-    }
-  } else {
-    // Manual solar panel form: check all fields from your custom form
-    const missingManualFields: string[] = [];
-
-    const customData = formData.customSolarPanelData;
-    if (!customData) {
-      console.error("All manual fields are missing.");
-      setErrorMessage("Please fill out all required fields for manual solar panel entry.");
-      setOpenError(true);
-      return false;
-    }
-
-    // 1) Location checks
-    if (!customData.location.name.trim()) missingManualFields.push("Location Name");
-    if (customData.location.latitude == null) missingManualFields.push("Latitude");
-    if (customData.location.longitude == null) missingManualFields.push("Longitude");
-    if (customData.location.altitude == null) missingManualFields.push("Altitude");
-    if (!customData.location.timezone.trim()) missingManualFields.push("Timezone");
-
-    // 2) System Parameters
-    // We allow 0, so we only check for null/undefined
-    if (customData.tilt == null) missingManualFields.push("Tilt");
-    if (customData.orientation == null) missingManualFields.push("Orientation");
-
-    // 3) Custom Solar Module
-    const moduleData = customData.custom_solar_module;
-    if (!moduleData.name.trim()) missingManualFields.push("Module Name");
-    if (moduleData.pdc0 == null) missingManualFields.push("Pdc0");
-    if (moduleData.gamma_pdc == null) missingManualFields.push("Gamma Pdc");
-    if (moduleData.bvoco == null) missingManualFields.push("BvocO");
-    if (moduleData.bvmpo == null) missingManualFields.push("BvmpO");
-    if (moduleData.impo == null) missingManualFields.push("Impo");
-    if (moduleData.vmpo == null) missingManualFields.push("VmpO");
-    if (moduleData.pmpo == null) missingManualFields.push("PmpO");
-    if (moduleData.a_c == null) missingManualFields.push("A_c");
-    if (moduleData.n_s == null) missingManualFields.push("N_s");
-    if (moduleData.t_noct == null) missingManualFields.push("T_noct");
-
-    // 4) Custom Inverter
-    const inverterData = customData.custom_inverter;
-    if (!inverterData.name.trim()) missingManualFields.push("Inverter Name");
-    if (inverterData.pdc0 == null) missingManualFields.push("Inverter Pdc0");
-    if (inverterData.paco == null) missingManualFields.push("Paco");
-    if (inverterData.pdco == null) missingManualFields.push("Pdco");
-    if (inverterData.vdco == null) missingManualFields.push("Vdco");
-    if (inverterData.pso == null) missingManualFields.push("Pso");
-    if (inverterData.c0 == null) missingManualFields.push("C0");
-    if (inverterData.c1 == null) missingManualFields.push("C1");
-    if (inverterData.c2 == null) missingManualFields.push("C2");
-    if (inverterData.c3 == null) missingManualFields.push("C3");
-
-    // 5) Custom Temperature Model Params
-    const tempData = customData.custom_temp_model_params;
-    if (tempData.u_c == null) missingManualFields.push("U_c");
-    if (tempData.u_v == null) missingManualFields.push("U_v");
-    if (tempData.eta_m == null) missingManualFields.push("Eta_m");
-    if (tempData.alpha_absorption == null) missingManualFields.push("Alpha Absorption");
-
-    // Finally, if any are missing, show error and log
-    if (missingManualFields.length > 0) {
-      console.error(
-        "Missing required fields for manual solar panel entry:",
-        missingManualFields.join(", ")
-      );
-      setErrorMessage("Please fill out all required fields for manual solar panel entry.");
-      setOpenError(true);
-      return false;
-    }
-  }
-
-  return true;
-};
-
-
-  const validateGenericFields = (): boolean => {
-    const requiredFields: (keyof FormData)[] = [
-      "category",
-      "name",
-      "manufacturerModel",
-      "powerConsumption",
-      "unit",
-      "frequency",
-      "duration",
-      "location",
-      "environment",
-      "peakHoursStart",
-      "peakHoursEnd",
-    ];
-
-    for (const field of requiredFields) {
-      if (field === "peakHoursStart" || field === "peakHoursEnd") {
-        const dateValue = formData[field] as Dayjs | null;
-        if (!dateValue || !dateValue.isValid()) {
-          setErrorMessage("Please fill out all required fields.");
-          setOpenError(true);
-          return false;
-        }
-      } else {
-        const val = formData[field];
-        if (!val || !String(val).trim()) {
-          setErrorMessage("Please fill out all required fields.");
-          setOpenError(true);
-          return false;
-        }
+  // ---------------- Validation ----------------
+  const validateSolarFields = (): boolean => {
+    if (!manualEntry) {
+      const missingFields: string[] = [];
+      if (!formData.name?.trim()) missingFields.push("Name");
+      if (!formData.module?.trim()) missingFields.push("Module");
+      if (!formData.inverter?.trim()) missingFields.push("Inverter");
+      if (missingFields.length > 0) {
+        console.error("Missing required fields for solar panel:", missingFields.join(", "));
+        setErrorMessage("Please fill out all required fields for the solar panel.");
+        setOpenError(true);
+        return false;
+      }
+    } else {
+      const missingManualFields: string[] = [];
+      const customData = formData.customSolarPanelData;
+      if (!customData) {
+        console.error("All manual fields are missing.");
+        setErrorMessage("Please fill out all required fields for manual solar panel entry.");
+        setOpenError(true);
+        return false;
+      }
+      if (!customData.location.name.trim()) missingManualFields.push("Location Name");
+      if (customData.location.latitude == null) missingManualFields.push("Latitude");
+      if (customData.location.longitude == null) missingManualFields.push("Longitude");
+      if (customData.location.altitude == null) missingManualFields.push("Altitude");
+      if (!customData.location.timezone.trim()) missingManualFields.push("Timezone");
+      if (customData.tilt == null) missingManualFields.push("Tilt");
+      if (customData.orientation == null) missingManualFields.push("Orientation");
+      const moduleData = customData.custom_solar_module;
+      if (!moduleData.name.trim()) missingManualFields.push("Module Name");
+      if (moduleData.pdc0 == null) missingManualFields.push("Pdc0");
+      if (moduleData.gamma_pdc == null) missingManualFields.push("Gamma Pdc");
+      if (moduleData.bvoco == null) missingManualFields.push("BvocO");
+      if (moduleData.bvmpo == null) missingManualFields.push("BvmpO");
+      if (moduleData.impo == null) missingManualFields.push("Impo");
+      if (moduleData.vmpo == null) missingManualFields.push("VmpO");
+      if (moduleData.pmpo == null) missingManualFields.push("PmpO");
+      if (moduleData.a_c == null) missingManualFields.push("A_c");
+      if (moduleData.n_s == null) missingManualFields.push("N_s");
+      if (moduleData.t_noct == null) missingManualFields.push("T_noct");
+      const inverterData = customData.custom_inverter;
+      if (!inverterData.name.trim()) missingManualFields.push("Inverter Name");
+      if (inverterData.pdc0 == null) missingManualFields.push("Inverter Pdc0");
+      if (inverterData.paco == null) missingManualFields.push("Paco");
+      if (inverterData.pdco == null) missingManualFields.push("Pdco");
+      if (inverterData.vdco == null) missingManualFields.push("Vdco");
+      if (inverterData.pso == null) missingManualFields.push("Pso");
+      if (inverterData.c0 == null) missingManualFields.push("C0");
+      if (inverterData.c1 == null) missingManualFields.push("C1");
+      if (inverterData.c2 == null) missingManualFields.push("C2");
+      if (inverterData.c3 == null) missingManualFields.push("C3");
+      const tempData = customData.custom_temp_model_params;
+      if (tempData.u_c == null) missingManualFields.push("U_c");
+      if (tempData.u_v == null) missingManualFields.push("U_v");
+      if (tempData.eta_m == null) missingManualFields.push("Eta_m");
+      if (tempData.alpha_absorption == null) missingManualFields.push("Alpha Absorption");
+      if (missingManualFields.length > 0) {
+        console.error("Missing required fields for manual solar panel entry:", missingManualFields.join(", "));
+        setErrorMessage("Please fill out all required fields for manual solar panel entry.");
+        setOpenError(true);
+        return false;
       }
     }
     return true;
   };
 
-  const validateFields = (): boolean => {
-    if (formData.category === "Solar Panel") {
-      return validateSolarFields();
+  const validateNormalFields = (): boolean => {
+    const requiredFields: (keyof FormData)[] = [
+      "name",
+      "powerRatingValue",
+      "frequency",
+      "weekStart",
+      "energyType",
+      "standbyPowerValue",
+      "roomName",
+      "roomType",
+    ];
+    for (const field of requiredFields) {
+      if (!formData[field] || !String(formData[field]).trim()) {
+        setErrorMessage("Please fill out all required fields for the device.");
+        setOpenError(true);
+        return false;
+      }
     }
-    return validateGenericFields();
+    if (!formData.usageTimes || formData.usageTimes.length !== 7) {
+      setErrorMessage("Please provide usage times for all 7 days of the week.");
+      setOpenError(true);
+      return false;
+    }
+    return true;
+  };
+
+  const validateFields = (): boolean => {
+    return formData.category === "Solar Panel" ? validateSolarFields() : validateNormalFields();
+  };
+
+  // ---------------- Render Functions ----------------
+  const renderGenericForm = () => {
+    return (
+      <>
+        <TextField
+          label="Device Name"
+          value={formData.name}
+          onChange={(e) => handleChange("name", e.target.value)}
+          fullWidth
+          sx={{ mb: 2 }}
+        />
+        <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+          <TextField
+            label="Power Rating (Value)"
+            type="number"
+            value={formData.powerRatingValue}
+            onChange={(e) => handleChange("powerRatingValue", e.target.value)}
+            fullWidth
+          />
+          <FormControl sx={{ minWidth: "fit-content" }}>
+            <InputLabel id="power-rating-unit-label">Unit</InputLabel>
+            <Select
+              labelId="power-rating-unit-label"
+              value={formData.powerRatingUnit}
+              onChange={(e) => handleChange("powerRatingUnit", e.target.value)}
+            >
+              <MenuItem value="W">W</MenuItem>
+              <MenuItem value="kW">kW</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
+        <TextField
+          label="Usage Frequency (days)"
+          type="number"
+          value={formData.frequency}
+          onChange={(e) => handleChange("frequency", e.target.value)}
+          fullWidth
+          sx={{ mb: 2 }}
+        />
+        <TextField
+          label="Week Start Date"
+          type="date"
+          value={formData.weekStart ? formData.weekStart.format("YYYY-MM-DD") : ""}
+          onChange={(e) => handleChange("weekStart", dayjs(e.target.value))}
+          fullWidth
+          sx={{ mb: 2 }}
+        />
+        <Typography variant="h6" sx={{ mt: 2, mb: 2 }}>
+          Usage Times for the Week
+        </Typography>
+        {(formData.weekStart || dayjs()) &&
+          formData.usageTimes?.map((time, index) => {
+            const currentDate = (formData.weekStart || dayjs()).add(index, "day");
+            return (
+              <Box key={index} sx={{ display: "flex", gap: 2, alignItems: "center", mb: 2 }}>
+                <Typography sx={{ width: 100 }}>{currentDate.format("ddd, MMM D")}</Typography>
+                <TextField
+                  label="Start Time"
+                  type="time"
+                  value={time.start.format("HH:mm")}
+                  onChange={(e) => {
+                    const newTime = dayjs(e.target.value, "HH:mm");
+                    const updatedUsageTimes = [...(formData.usageTimes || [])];
+                    updatedUsageTimes[index].start = (formData.weekStart || dayjs())
+                      .add(index, "day")
+                      .hour(newTime.hour())
+                      .minute(newTime.minute());
+                    handleChange("usageTimes", updatedUsageTimes);
+                  }}
+                  sx={{ mb: 2 }}
+                />
+                <TextField
+                  label="End Time"
+                  type="time"
+                  value={time.end.format("HH:mm")}
+                  onChange={(e) => {
+                    const newTime = dayjs(e.target.value, "HH:mm");
+                    const updatedUsageTimes = [...(formData.usageTimes || [])];
+                    updatedUsageTimes[index].end = (formData.weekStart || dayjs())
+                      .add(index, "day")
+                      .hour(newTime.hour())
+                      .minute(newTime.minute());
+                    handleChange("usageTimes", updatedUsageTimes);
+                  }}
+                  sx={{ mb: 2 }}
+                />
+              </Box>
+            );
+          })}
+        <FormControl fullWidth sx={{ mb: 2 }}>
+          <InputLabel id="energy-type-label">Energy Type</InputLabel>
+          <Select
+            labelId="energy-type-label"
+            value={formData.energyType}
+            label="Energy Type"
+            onChange={(e) => handleChange("energyType", e.target.value)}
+          >
+            <MenuItem value="AC">AC</MenuItem>
+            <MenuItem value="DC">DC</MenuItem>
+          </Select>
+        </FormControl>
+        <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+          <TextField
+            label="Standby Power (Value)"
+            type="number"
+            value={formData.standbyPowerValue}
+            onChange={(e) => handleChange("standbyPowerValue", e.target.value)}
+            fullWidth
+            sx={{ mb: 0 }}
+          />
+          <FormControl sx={{ minWidth: "fit-content", mb: 1 }}>
+            <InputLabel id="standby-power-unit-label">Unit</InputLabel>
+            <Select
+              labelId="standby-power-unit-label"
+              value={formData.standbyPowerUnit}
+              onChange={(e) => handleChange("standbyPowerUnit", e.target.value)}
+            >
+              <MenuItem value="W">W</MenuItem>
+              <MenuItem value="kW">kW</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
+        {/* Render "Number of Devices" only when adding a new normal device */}
+        { !isEditing && (
+          <TextField
+            label="Number of Devices"
+            type="number"
+            value={formData.numberOfDevices}
+            onChange={(e) => handleChange("numberOfDevices", e.target.value)}
+            fullWidth
+            sx={{ mb: 2 }}
+          />
+        )}
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mb: 2 }}>
+          <TextField
+            label="Room Name"
+            value={formData.roomName}
+            onChange={(e) => handleChange("roomName", e.target.value)}
+            fullWidth
+            sx={{ mb: 2 }}
+          />
+          <FormControl fullWidth sx={{ mb: 2 }}>
+            <InputLabel id="room-type-label">Room Type</InputLabel>
+            <Select
+              labelId="room-type-label"
+              value={formData.roomType || ""}
+              label="Room Type"
+              onChange={(e) => handleChange("roomType", e.target.value)}
+            >
+              {roomData.type.map((room: string) => (
+                <MenuItem key={room} value={room}>
+                  {room}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
+      </>
+    );
   };
 
   const handleSubmit = () => {
-    if (!validateFields()) {
-      return;
-    }
+    if (!validateFields()) return;
 
-    const updatedFormData = {
-      ...formData,
-      lastUpdated: new Date().toISOString(),
-      // For standard solar panel form, force tilt=30.0 if not manual entry
-      tilt: formData.category === "Solar Panel" && !manualEntry ? "30.0" : formData.tilt,
-    };
-
-    // Save to localStorage
     const existingDevices = JSON.parse(localStorage.getItem("devices") || "[]");
-    if (isEditing && editingIndex !== null) {
-      existingDevices[editingIndex] = updatedFormData;
-    } else {
-      updatedFormData.id = Number(`${Date.now()}${Math.floor(Math.random() * 1000)}`);
-      existingDevices.push(updatedFormData);
-    }
-    localStorage.setItem("devices", JSON.stringify(existingDevices));
 
+    if (formData.category === "Solar Panel") {
+      const baseSolarData = {
+        ...formData,
+        lastUpdated: new Date().toISOString(),
+        // Use a default tilt for non-manual solar panel entries
+        tilt: formData.category === "Solar Panel" && !manualEntry ? "30.0" : formData.tilt,
+      };
+
+      if (isEditing && editingIndex !== null) {
+        existingDevices[editingIndex] = baseSolarData;
+      } else {
+        // If adding, you could add multiple devices if desired.
+        const count = Number(formData.numberOfDevices) || 1;
+        for (let i = 0; i < count; i++) {
+          const newDevice = {
+            ...baseSolarData,
+            id: Number(`${Date.now()}${Math.floor(Math.random() * 1000)}`),
+          };
+          existingDevices.push(newDevice);
+        }
+      }
+      localStorage.setItem("devices", JSON.stringify(existingDevices));
+    } else {
+      const baseNormalData = {
+        deviceName: formData.name,
+        powerRating: {
+          value: Number(formData.powerRatingValue),
+          unit: formData.powerRatingUnit,
+        },
+        usagePattern: {
+          frequency_unit: "days",
+          frequency_value: Number(formData.frequency),
+          usage_times: formData.usageTimes
+            ? formData.usageTimes.map((time) => ({
+                start: time.start.toISOString(),
+                end: time.end.toISOString(),
+              }))
+            : [],
+        },
+        energyType: formData.energyType,
+        standbyPower: {
+          value: Number(formData.standbyPowerValue),
+          unit: formData.standbyPowerUnit,
+        },
+        deviceCategory: formData.category,
+        room: {
+          roomName: formData.roomName,
+          roomType: formData.roomType,
+        },
+        lastUpdated: new Date().toISOString(),
+      };
+
+      if (isEditing && editingIndex !== null) {
+        existingDevices[editingIndex] = {
+          ...baseNormalData,
+          deviceId: formData.id || String(`${Date.now()}${Math.floor(Math.random() * 1000)}`),
+          room: {
+            roomId: formData.roomId || String(`${Date.now()}${Math.floor(Math.random() * 1000)}`),
+            roomName: formData.roomName,
+            roomType: formData.roomType,
+          },
+        };
+      } else {
+        const count = Number(formData.numberOfDevices) || 1;
+        for (let i = 0; i < count; i++) {
+          const newDevice = {
+            ...baseNormalData,
+            deviceId: String(`${Date.now()}${Math.floor(Math.random() * 1000)}`),
+            room: {
+              roomId: String(`${Date.now()}${Math.floor(Math.random() * 1000)}`),
+              roomName: formData.roomName,
+              roomType: formData.roomType,
+            },
+          };
+          existingDevices.push(newDevice);
+        }
+      }
+      localStorage.setItem("devices", JSON.stringify(existingDevices));
+    }
     setOpenPopup(true);
   };
 
@@ -460,110 +718,12 @@ const validateSolarFields = (): boolean => {
     setOpenError(false);
   };
 
-  // Prepare device name for success message
   const deviceName =
     formData.name?.trim() || (formData.category === "Solar Panel" ? "Solar Panel" : "Device");
   const popupTitle = isEditing ? `${deviceName} Updated` : `${deviceName} Added`;
   const popupMessage = isEditing
     ? `The ${deviceName.toLowerCase()} has been successfully updated.`
     : `The ${deviceName.toLowerCase()} has been successfully added to your list.`;
-
-  const renderGenericForm = () => (
-    <>
-      <TextField
-        label="Name"
-        value={formData.name}
-        onChange={(e) => handleChange("name", e.target.value)}
-        fullWidth
-        sx={{ mb: 2 }}
-      />
-      <TextField
-        label="Manufacturer and Model"
-        value={formData.manufacturerModel}
-        onChange={(e) => handleChange("manufacturerModel", e.target.value)}
-        fullWidth
-        sx={{ mb: 2 }}
-      />
-      <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
-        <TextField
-          label="Power Consumption"
-          type="number"
-          value={formData.powerConsumption}
-          onChange={(e) => handleChange("powerConsumption", e.target.value)}
-          fullWidth
-        />
-        <FormControl sx={{ minWidth: "fit-content" }}>
-          <Select
-            value={formData.unit}
-            onChange={(e) => handleChange("unit", e.target.value)}
-          >
-            <MenuItem value="">None</MenuItem>
-            <MenuItem value="W">W</MenuItem>
-            <MenuItem value="kW">kW</MenuItem>
-          </Select>
-        </FormControl>
-      </Box>
-      <FormControl fullWidth sx={{ mb: 2 }}>
-        <InputLabel id="frequency-label">Frequency of Usage</InputLabel>
-        <Select
-          labelId="frequency-label"
-          value={formData.frequency}
-          onChange={(e) => handleChange("frequency", e.target.value)}
-        >
-          <MenuItem value="">None</MenuItem>
-          <MenuItem value="Daily">Daily</MenuItem>
-          <MenuItem value="Weekly">Weekly</MenuItem>
-        </Select>
-      </FormControl>
-      <TextField
-        label="Duration (hours)"
-        type="number"
-        value={formData.duration}
-        onChange={(e) => handleChange("duration", e.target.value)}
-        fullWidth
-        sx={{ mb: 2 }}
-      />
-      <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
-        <TextField
-          label="Peak Hours Start"
-          type="time"
-          value={formData.peakHoursStart ? formData.peakHoursStart.format("HH:mm") : ""}
-          onChange={(e) => handleChange("peakHoursStart", dayjs(e.target.value, "HH:mm"))}
-          fullWidth
-        />
-        <TextField
-          label="Peak Hours End"
-          type="time"
-          value={formData.peakHoursEnd ? formData.peakHoursEnd.format("HH:mm") : ""}
-          onChange={(e) => handleChange("peakHoursEnd", dayjs(e.target.value, "HH:mm"))}
-          fullWidth
-        />
-      </Box>
-      <Autocomplete
-        options={locationsData.locations}
-        getOptionLabel={(option) => option || ""}
-        value={formData.location}
-        onChange={(event, newValue) => handleChange("location", newValue || "")}
-        renderInput={(params) => <TextField {...params} label="Location" fullWidth />}
-        clearOnEscape
-        freeSolo
-        disablePortal
-        sx={{ mb: 2 }}
-      />
-      <FormControl fullWidth>
-        <InputLabel id="environment-label">Environment</InputLabel>
-        <Select
-          labelId="environment-label"
-          value={formData.environment}
-          onChange={(e) => handleChange("environment", e.target.value)}
-        >
-          <MenuItem value="">None</MenuItem>
-          <MenuItem value="Indoor">Indoor</MenuItem>
-          <MenuItem value="Outdoor">Outdoor</MenuItem>
-        </Select>
-      </FormControl>
-    </>
-  );
 
   return (
     <>
@@ -573,24 +733,25 @@ const validateSolarFields = (): boolean => {
         autoComplete="off"
         sx={{
           width: 400,
-          margin: "0 auto",
+          mx: "auto",
+          pt: 4,
+          pb: 4,
           display: "flex",
           flexDirection: "column",
           gap: 2,
         }}
       >
-        <Typography variant="h5" sx={{ textAlign: "center" }}>
+        <Typography variant="h5" sx={{ textAlign: "center", mb: 2 }}>
           {isEditing ? "Edit Device" : "Add New Device"}
         </Typography>
 
-        <FormControl fullWidth>
+        <FormControl fullWidth sx={{ mb: 2 }}>
           <InputLabel id="category-label">Category</InputLabel>
           <Select
             labelId="category-label"
             value={formData.category}
             onChange={(e) => {
               handleChange("category", e.target.value);
-              // Reset manualEntry if category changes away from "Solar Panel"
               if (e.target.value !== "Solar Panel") {
                 setManualEntry(false);
               }
@@ -609,7 +770,6 @@ const validateSolarFields = (): boolean => {
             formData={formData}
             handleChange={handleChange}
             handleCustomChange={(path, val) => {
-              // Update nested fields for custom solar panel data
               setFormData((prev) => {
                 const defaultSolarPanelData: CustomSolarPanelData = {
                   location: { name: "", latitude: 0, longitude: 0, altitude: 0, timezone: "" },
@@ -673,17 +833,19 @@ const validateSolarFields = (): boolean => {
           renderGenericForm()
         )}
 
-        <Button
-          variant="contained"
-          color="primary"
-          sx={{ backgroundColor: theme.palette.primary.darker }}
-          onClick={handleSubmit}
-        >
-          {isEditing ? "Update" : "Save"}
-        </Button>
+        <Box sx={{ mb: 4 }}>
+          <Button
+            variant="contained"
+            color="primary"
+            fullWidth
+            sx={{ backgroundColor: theme.palette.primary.darker }}
+            onClick={handleSubmit}
+          >
+            {isEditing ? "Update" : "Save"}
+          </Button>
+        </Box>
       </Box>
 
-      {/* Success Dialog */}
       <Dialog
         open={openPopup}
         onClose={handleClosePopup}
@@ -711,7 +873,6 @@ const validateSolarFields = (): boolean => {
         </DialogActions>
       </Dialog>
 
-      {/* Error Dialog */}
       <Dialog
         open={openError}
         onClose={handleCloseError}

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Typography,
@@ -14,110 +14,16 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
   ResponsiveContainer,
+  Legend as RechartsLegend,
+  Tooltip as RechartsTooltip,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts";
+import dayjs from "dayjs";
 
-// ------------------ ARC DRAWING UTILS ------------------
-function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
-  const angleRad = (Math.PI / 180) * angleDeg;
-  return {
-    x: cx + r * Math.cos(angleRad),
-    y: cy - r * Math.sin(angleRad),
-  };
-}
-
-function arcPath(cx: number, cy: number, r: number, startAngle: number, endAngle: number) {
-  const start = polarToCartesian(cx, cy, r, endAngle);
-  const end = polarToCartesian(cx, cy, r, startAngle);
-  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
-  return ["M", start.x, start.y, "A", r, r, 0, largeArcFlag, 0, end.x, end.y].join(" ");
-}
-// -------------------------------------------------------
-
-// Dummy data for CONSUMPTION
-const consumptionDataWeek = [
-  { name: "Mon", current: 15, recommended: 12 },
-  { name: "Tue", current: 18, recommended: 14 },
-  { name: "Wed", current: 25, recommended: 20 },
-  { name: "Thu", current: 22, recommended: 20 },
-  { name: "Fri", current: 30, recommended: 28 },
-];
-
-const consumptionDataMonth = [
-  { name: "Apr", current: 20, recommended: 18 },
-  { name: "May", current: 15, recommended: 14 },
-  { name: "Jun", current: 25, recommended: 22 },
-  { name: "Jul", current: 35, recommended: 32 },
-  { name: "Aug", current: 40, recommended: 38 },
-  { name: "Sep", current: 30, recommended: 28 },
-  { name: "Oct", current: 45, recommended: 42 },
-];
-
-const consumptionDataYear = [
-  { name: "Jan", current: 10, recommended: 9 },
-  { name: "Feb", current: 12, recommended: 11 },
-  { name: "Mar", current: 20, recommended: 18 },
-  { name: "Apr", current: 15, recommended: 14 },
-  { name: "May", current: 25, recommended: 23 },
-  { name: "Jun", current: 30, recommended: 28 },
-  { name: "Jul", current: 36, recommended: 34 },
-  { name: "Aug", current: 40, recommended: 38 },
-  { name: "Sep", current: 25, recommended: 23 },
-  { name: "Oct", current: 42, recommended: 40 },
-  { name: "Nov", current: 28, recommended: 26 },
-  { name: "Dec", current: 35, recommended: 33 },
-];
-
-const consumptionDataSets = {
-  week: consumptionDataWeek,
-  month: consumptionDataMonth,
-  year: consumptionDataYear,
-};
-
-// Dummy data for PRODUCTION
-const productionDataWeek = [
-  { name: "Mon", current: 10, recommended: 8 },
-  { name: "Tue", current: 12, recommended: 10 },
-  { name: "Wed", current: 18, recommended: 16 },
-  { name: "Thu", current: 40, recommended: 35 },
-  { name: "Fri", current: 25, recommended: 22 },
-  { name: "Sat", current: 22, recommended: 20 },
-  { name: "Sun", current: 15, recommended: 13 },
-];
-
-const productionDataMonth = [
-  { name: "Apr", current: 10, recommended: 9 },
-  { name: "May", current: 12, recommended: 11 },
-  { name: "Jun", current: 18, recommended: 16 },
-  { name: "Jul", current: 40, recommended: 38 },
-  { name: "Aug", current: 50, recommended: 47 },
-  { name: "Sep", current: 20, recommended: 18 },
-  { name: "Oct", current: 55, recommended: 50 },
-];
-
-const productionDataYear = [
-  { name: "Jan", current: 5, recommended: 4 },
-  { name: "Feb", current: 10, recommended: 9 },
-  { name: "Mar", current: 12, recommended: 11 },
-  { name: "Apr", current: 18, recommended: 16 },
-  { name: "May", current: 22, recommended: 20 },
-  { name: "Jun", current: 28, recommended: 26 },
-  { name: "Jul", current: 35, recommended: 33 },
-  { name: "Aug", current: 50, recommended: 47 },
-  { name: "Sep", current: 20, recommended: 18 },
-  { name: "Oct", current: 55, recommended: 52 },
-  { name: "Nov", current: 15, recommended: 14 },
-  { name: "Dec", current: 25, recommended: 23 },
-];
-
-const productionDataSets = {
-  week: productionDataWeek,
-  month: productionDataMonth,
-  year: productionDataYear,
-};
-
-// Extra details for each tile (dummy text)
+// ---------- SUGGESTIONS DATA ----------
 const expandedDetails = {
   lighting: `Savings
 -15 kWh/month
@@ -167,7 +73,10 @@ const Tile: React.FC<TileProps> = ({ title, shortText, expandKey, children }) =>
       </Typography>
       <Collapse in={isExpanded} timeout="auto" unmountOnExit>
         <Box sx={{ mt: 1 }}>
-          <Typography variant="body2" sx={{ whiteSpace: "pre-line", fontSize: "0.8rem", color: "#666" }}>
+          <Typography
+            variant="body2"
+            sx={{ whiteSpace: "pre-line", fontSize: "0.8rem", color: "#666" }}
+          >
             {children}
           </Typography>
         </Box>
@@ -180,41 +89,120 @@ const RecommendationsScreen: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
-  // Default to "week" timeframe
-  const [mode, setMode] = useState<"consumption" | "production">("consumption");
+  // ---------- LINE CHART DATA ----------
   const [timeframe, setTimeframe] = useState<"week" | "month" | "year">("week");
 
-  // Get the data for the chart based on the selected mode and timeframe
-  const currentData =
-    mode === "consumption"
-      ? consumptionDataSets[timeframe]
-      : productionDataSets[timeframe];
-
-  // Dummy total kWh value (example)
-  const totalKwh =
-    mode === "consumption"
-      ? timeframe === "week"
-        ? 150
-        : timeframe === "month"
-        ? 400
-        : 1200
-      : timeframe === "week"
-      ? 100
-      : timeframe === "month"
-      ? 250
-      : 700;
-
-  // Mode toggle handler
-  const handleModeChange = (
-    event: React.MouseEvent<HTMLElement>,
-    newValue: "consumption" | "production" | null
-  ) => {
-    if (newValue) {
-      setMode(newValue);
-    }
+  const consumptionDataWeek = [
+    { name: "Mon", current: 15, recommended: 12 },
+    { name: "Tue", current: 18, recommended: 14 },
+    { name: "Wed", current: 25, recommended: 20 },
+    { name: "Thu", current: 22, recommended: 20 },
+    { name: "Fri", current: 30, recommended: 28 },
+  ];
+  const consumptionDataMonth = [
+    { name: "Apr", current: 20, recommended: 18 },
+    { name: "May", current: 15, recommended: 14 },
+    { name: "Jun", current: 25, recommended: 22 },
+    { name: "Jul", current: 35, recommended: 32 },
+    { name: "Aug", current: 40, recommended: 38 },
+    { name: "Sep", current: 30, recommended: 28 },
+    { name: "Oct", current: 45, recommended: 42 },
+  ];
+  const consumptionDataYear = [
+    { name: "Jan", current: 10, recommended: 9 },
+    { name: "Feb", current: 12, recommended: 11 },
+    { name: "Mar", current: 20, recommended: 18 },
+    { name: "Apr", current: 15, recommended: 14 },
+    { name: "May", current: 25, recommended: 23 },
+    { name: "Jun", current: 30, recommended: 28 },
+    { name: "Jul", current: 36, recommended: 34 },
+    { name: "Aug", current: 40, recommended: 38 },
+    { name: "Sep", current: 25, recommended: 23 },
+    { name: "Oct", current: 42, recommended: 40 },
+    { name: "Nov", current: 28, recommended: 26 },
+    { name: "Dec", current: 35, recommended: 33 },
+  ];
+  const consumptionDataSets = {
+    week: consumptionDataWeek,
+    month: consumptionDataMonth,
+    year: consumptionDataYear,
   };
+  const currentLineData = consumptionDataSets[timeframe];
 
-  // Timeframe toggle handler
+  // ---------- LOAD DEVICES & COMPUTE DAILY CONSUMPTION ----------
+  const [devicesConsumption, setDevicesConsumption] = useState<
+    { name: string; consumption: number }[]
+  >([]);
+
+  useEffect(() => {
+    const storedDevicesStr = localStorage.getItem("devices") || "[]";
+    let storedDevices: any[] = [];
+    try {
+      storedDevices = JSON.parse(storedDevicesStr);
+    } catch (error) {
+      console.error("Error parsing devices:", error);
+    }
+
+    // Filter out solar devices (category = "Solar Panel")
+    const filteredDevices = storedDevices.filter((dev) => {
+      const cat = dev.category || dev.deviceCategory;
+      return cat !== "Solar Panel"; // exclude solar
+    });
+
+    const consumptionArray = filteredDevices.map((dev) => {
+      const name = dev.deviceName || dev.name || "Unnamed";
+      // Convert powerRating to kW
+      let powerKW = 0;
+      if (dev.powerRating && dev.powerRating.value) {
+        powerKW =
+          Number(dev.powerRating.value) /
+          (dev.powerRating.unit === "W" ? 1000 : 1);
+      }
+      // Convert standbyPower to kW
+      let standbyKW = 0;
+      if (dev.standbyPower && dev.standbyPower.value) {
+        standbyKW =
+          Number(dev.standbyPower.value) /
+          (dev.standbyPower.unit === "W" ? 1000 : 1);
+      }
+      // Calculate average active hours
+      let avgActiveHours = 1; // fallback
+      if (
+        dev.usagePattern &&
+        Array.isArray(dev.usagePattern.usage_times) &&
+        dev.usagePattern.usage_times.length > 0
+      ) {
+        const hoursArr = dev.usagePattern.usage_times.map((ut: any) => {
+          const start = dayjs(ut.start);
+          const end = dayjs(ut.end);
+          if (!start.isValid() || !end.isValid()) return 0;
+          let h = end.diff(start, "hour", true);
+          // If negative => overnight => add 24
+          if (h < 0) {
+            h += 24;
+          }
+          // clamp
+          if (h < 0) h = 0;
+          if (h > 24) h = 24;
+          return h;
+        });
+        avgActiveHours =
+          hoursArr.reduce((a: number, b: number) => a + b, 0) / hoursArr.length;
+      }
+      // active + standby consumption
+      const activeConsumption = powerKW * avgActiveHours;
+      const standbyConsumption = standbyKW * (24 - avgActiveHours);
+      const totalDaily = activeConsumption + standbyConsumption;
+      return { name, consumption: totalDaily };
+    });
+
+    setDevicesConsumption(consumptionArray);
+  }, []);
+
+  // Colors for the pie chart
+  const pieColors = ["#5A9FA3", "#FF8A65", "#4DB6AC", "#BA68C8", "#FFD54F", "#90A4AE"];
+
+  // ---------- TIMEFRAME TOGGLE HANDLER ----------
   const handleTimeframeChange = (
     event: React.MouseEvent<HTMLElement>,
     newValue: "week" | "month" | "year" | null
@@ -245,55 +233,51 @@ const RecommendationsScreen: React.FC = () => {
         </Typography>
       </Box>
 
-      {/* Dome Progress (dummy info) */}
-      <Box sx={{ mb: 3, textAlign: "center", width: "100%" }}>
-        <Typography variant="body1" sx={{ fontWeight: 400, mb: 1 }}>
-          You are
+      {/* Pie Chart for Energy Consumption by Device */}
+      <Box
+        sx={{
+          mb: 3,
+          textAlign: "center",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+        }}
+      >
+        <Typography variant="subtitle1" sx={{ fontWeight: 400, mb: 1 }}>
+          Energy Consumption by Device
         </Typography>
-        <Box
-          sx={{
-            position: "relative",
-            width: 120,
-            height: 120,
-            mx: "auto",
-            mb: 1,
-          }}
-        >
-          <svg width="120" height="120">
-            <path
-              d={arcPath(60, 60, 50, 180, 0)}
-              stroke="#e0e0e0"
-              strokeWidth="10"
-              fill="transparent"
+        {devicesConsumption.length > 0 ? (
+          <PieChart width={320} height={320}>
+            <Pie
+              data={devicesConsumption}
+              dataKey="consumption"
+              nameKey="name"
+              cx="50%"
+              cy="50%"
+              outerRadius={100}
+              animationDuration={1000}
+              animationEasing="ease-out"
+            >
+              {devicesConsumption.map((entry, index) => (
+                <Cell
+                  key={`cell-${index}`}
+                  fill={pieColors[index % pieColors.length]}
+                />
+              ))}
+            </Pie>
+            {/* On hover, show consumption with 2 decimals */}
+            <RechartsTooltip formatter={(value: number) => `${value.toFixed(2)} kWh`} />
+            {/* Legend on bottom listing device names */}
+            <RechartsLegend
+              verticalAlign="bottom"
+              align="center"
+              iconType="circle"
+              wrapperStyle={{ fontSize: "0.8rem", marginTop: "10px" }}
             />
-            <path
-              d={arcPath(60, 60, 50, 180, 45)}
-              stroke="#5A9FA3"
-              strokeWidth="10"
-              fill="transparent"
-            />
-          </svg>
-          <Box
-            sx={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "100%",
-              height: "100%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              pointerEvents: "none",
-            }}
-          >
-            <Typography variant="body1" sx={{ fontWeight: "bold", fontSize: "1.1rem" }}>
-              75%
-            </Typography>
-          </Box>
-        </Box>
-        <Typography variant="body2" sx={{ color: "#555" }}>
-          closer to your target.
-        </Typography>
+          </PieChart>
+        ) : (
+          <Typography variant="body2">No device data available.</Typography>
+        )}
       </Box>
 
       {/* Suggestions */}
@@ -340,7 +324,7 @@ const RecommendationsScreen: React.FC = () => {
         </Box>
       </Box>
 
-      {/* Efficiency Gains */}
+      {/* Efficiency Gains - Line Chart Section */}
       <Box sx={{ width: "100%" }}>
         <Box
           sx={{
@@ -376,19 +360,13 @@ const RecommendationsScreen: React.FC = () => {
                 padding: "2px",
                 margin: "0px 5px",
                 lineHeight: 1.2,
-                "&:hover": {
-                  backgroundColor: "#ECECEC",
-                },
+                "&:hover": { backgroundColor: "#ECECEC" },
                 "&.Mui-selected": {
                   backgroundColor: "#5A9FA3",
                   color: "#fff",
-                  "&:hover": {
-                    backgroundColor: "#4a868a",
-                  },
+                  "&:hover": { backgroundColor: "#4a868a" },
                 },
-                "&:not(:last-of-type)": {
-                  position: "relative",
-                },
+                "&:not(:last-of-type)": { position: "relative" },
                 "&:not(:last-of-type)::after": {
                   content: '""',
                   position: "absolute",
@@ -410,7 +388,10 @@ const RecommendationsScreen: React.FC = () => {
 
         <Box sx={{ width: "100%", height: 220, mb: 2 }}>
           <ResponsiveContainer>
-            <LineChart data={currentData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+            <LineChart
+              data={currentLineData}
+              margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+            >
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis
                 dataKey="name"
@@ -424,21 +405,35 @@ const RecommendationsScreen: React.FC = () => {
                 tick={{ fontFamily: "inherit", fontSize: 12, fill: "#8D8D8D" }}
                 domain={[0, 50]}
               />
-              <Tooltip
+              <RechartsTooltip
                 contentStyle={{
                   borderRadius: "8px",
                   border: "1px solid #ccc",
                   fontFamily: "inherit",
                 }}
               />
-              <Line type="monotone" dataKey="current" stroke="#5A9FA3" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="recommended" stroke="#999" strokeWidth={2} dot={false} />
+              <Line
+                type="monotone"
+                dataKey="current"
+                stroke="#5A9FA3"
+                strokeWidth={2}
+                dot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="recommended"
+                stroke="#999"
+                strokeWidth={2}
+                dot={false}
+              />
             </LineChart>
           </ResponsiveContainer>
         </Box>
 
-        {/* Legend */}
-        <Box sx={{ display: "flex", alignItems: "center", gap: 2, justifyContent: "center", mt: 1 }}>
+        {/* Legend for the line chart */}
+        <Box
+          sx={{ display: "flex", alignItems: "center", gap: 2, justifyContent: "center", mt: 1 }}
+        >
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
             <Box sx={{ width: 10, height: 10, borderRadius: "50%", backgroundColor: "#5A9FA3" }} />
             <Typography variant="body2" sx={{ fontFamily: "inherit", fontSize: "0.9rem" }}>
