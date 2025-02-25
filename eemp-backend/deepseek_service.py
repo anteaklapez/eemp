@@ -1,15 +1,12 @@
-from typing import List
-
+from typing import List, Dict
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
 import json
 import re
-
 from pydantic import BaseModel, Field, ValidationError
 
 load_dotenv()
-
 api_key = os.getenv("OPENROUTER_API_KEY")
 
 client = OpenAI(
@@ -23,7 +20,11 @@ PROMPT_TEMPLATE = """Analyze these energy parameters and provide JSON recommenda
     {{
       "title": "short title",
       "suggestion": "concrete advice",
-      "savings_predictions": ["specific metric 1", "specific metric 2 (optional)", "specific metric 3 (optional)"]
+      "savings_predictions": ["specific metric 1", "specific metric 2 (optional)", "specific metric 3 (optional)"],
+      "efficiency": {{
+        "daily": 5.5,
+        "monthly": 15
+      }}
     }}
   ]
 }}
@@ -34,17 +35,23 @@ Solar: {panel_data}
 Weather: {weather_data}
 Devices: {devices}
 
-Return ONLY VALID JSON following the example format. Do not add explanations."""
+Return ONLY VALID JSON following the example format. Use numbers between 0-100 for daily and monthly efficiency percentages (no % symbol). Do not add explanations."""
+
+
+class Efficiency(BaseModel):
+    daily: float = Field(..., ge=0, le=100, description="Daily energy savings percentage")
+    monthly: float = Field(..., ge=0, le=100, description="Monthly energy savings percentage")
 
 
 class SavingsPrediction(BaseModel):
-  title: str = Field(..., max_length=40)
-  suggestion: str = Field(..., max_length=180)
-  savings_predictions: List[str] = Field(..., min_items=1, max_items=3)
+    title: str = Field(..., max_length=40)
+    suggestion: str = Field(..., max_length=180)
+    savings_predictions: List[str] = Field(..., min_items=1, max_items=3)
+    efficiency: Efficiency  # Now using numeric values
 
 
 class RecommendationResponse(BaseModel):
-  recommendations: List[SavingsPrediction] = Field(..., min_items=1, max_items=10)
+    recommendations: List[SavingsPrediction] = Field(..., min_items=1, max_items=10)
 
 
 async def get_recommendations(request):
@@ -71,12 +78,11 @@ async def get_recommendations(request):
       json_match = re.search(r'\{.*\}', raw_response, re.DOTALL)
 
       if not json_match:
-        return {"error": "No JSON found in response"}
+        await get_recommendations(request)
 
       json_str = json_match.group(0)
       parsed = RecommendationResponse.model_validate_json(json_str)
       return parsed
 
     except (json.JSONDecodeError, ValidationError) as e:
-      return {"error": "Invalid JSON response from API"}
-
+        return {"error": f"Invalid JSON response from API: {str(e)}"}
