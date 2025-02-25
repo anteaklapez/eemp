@@ -37,8 +37,12 @@ def calculate_hourly_consumption(devices: List[Device], start_date: str, tz: Zon
 
     for device in devices:
         # Convert power values to kW
-        active_power = device.powerRating.value / 1000
-        standby_power = device.standbyPower.value / 1000
+        if device.powerRating.unit == 'W':
+            active_power = device.powerRating.value / 1000
+            standby_power = device.standbyPower.value / 1000
+        else:
+            active_power = device.powerRating.value
+            standby_power = device.standbyPower.value
         num_devices = device.numberOfDevices
 
         # Initialize active duration matrix
@@ -196,26 +200,6 @@ async def predict_daily(request: PredictionRequest):
         daily_consumption,
         weather_full
     )
-    return make_predictions(df_forecast)
-
-def predict_consumption_hourly(location: LocationData, consumption: float):
-    """Predict consumption for 48-hour hourly forecast"""
-    # Get cached hourly data
-    hourly_weather = get_hourly_weather_data(location)
-    weather_parsed = parse_hourly_response(hourly_weather, location.timezone)
-    weather_full = calculate_radiation(SolarPanelData(tilt=30, orientation=180), weather_parsed, location)
-    df_forecast = prepare_hourly_forecast(location, consumption, weather_full)
-    return make_predictions(df_forecast)
-
-
-def predict_consumption_daily(location: LocationData, consumption: float):
-    """Predict consumption for 7-day daily forecast"""
-    # Get cached daily data
-    daily_weather = get_daily_weather_data(location)
-    weather_parsed = parse_daily_response(daily_weather, location.timezone)
-    weather_full = calculate_radiation(SolarPanelData(tilt=30, orientation=180), weather_parsed, location)
-
-    df_forecast = prepare_daily_forecast(location, consumption, weather_full)
     return make_predictions(df_forecast)
 
 
