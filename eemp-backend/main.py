@@ -18,10 +18,10 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-app.include_router(router_solar)
-app.include_router(router_weather)
-app.include_router(router_predictions)
-app.include_router(router_recommendations)
+app.include_router(router_solar.router)
+app.include_router(router_weather.router)
+app.include_router(router_predictions.router)
+app.include_router(router_recommendations.router)
 
 
 if __name__ == "__main__":
