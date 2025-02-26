@@ -5,6 +5,7 @@ from router_weather import router as router_weather
 from router_predictions import router as router_predictions
 from router_recommendations import router as router_recommendations
 import logging
+import os
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,4 +27,4 @@ app.include_router(router_recommendations)
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host=os.getenv("HOST"), port=int(os.getenv("PORT")), reload=True)
