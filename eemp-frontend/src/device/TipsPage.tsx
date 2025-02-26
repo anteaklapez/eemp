@@ -65,7 +65,7 @@ const Tile: React.FC<TileProps> = ({ title, shortText, expandKey, children }) =>
         "&:hover": { backgroundColor: "#f2f2f2" },
       }}
     >
-      <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
+      <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 0.5 }}>
         {title}
       </Typography>
       <Typography variant="body2" sx={{ fontSize: "0.85rem" }}>
@@ -88,10 +88,9 @@ const Tile: React.FC<TileProps> = ({ title, shortText, expandKey, children }) =>
 const RecommendationsScreen: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-
-  // ---------- LINE CHART DATA ----------
   const [timeframe, setTimeframe] = useState<"week" | "month" | "year">("week");
 
+  // ---------- LINE CHART DATA ----------
   const consumptionDataWeek = [
     { name: "Mon", current: 15, recommended: 12 },
     { name: "Tue", current: 18, recommended: 14 },
@@ -129,8 +128,8 @@ const RecommendationsScreen: React.FC = () => {
   };
   const currentLineData = consumptionDataSets[timeframe];
 
-  // ---------- LOAD DEVICES & COMPUTE DAILY CONSUMPTION ----------
-  const [devicesConsumption, setDevicesConsumption] = useState<
+  // ---------- LOAD DEVICES & COMPUTE DAILY CONSUMPTION PER ROOM ----------
+  const [roomsConsumption, setRoomsConsumption] = useState<
     { name: string; consumption: number }[]
   >([]);
 
@@ -143,30 +142,27 @@ const RecommendationsScreen: React.FC = () => {
       console.error("Error parsing devices:", error);
     }
 
-    // Filter out solar devices (category = "Solar Panel")
+    // Exclude solar devices
     const filteredDevices = storedDevices.filter((dev) => {
       const cat = dev.category || dev.deviceCategory;
-      return cat !== "Solar Panel"; // exclude solar
+      return cat !== "Solar Panel";
     });
 
-    const consumptionArray = filteredDevices.map((dev) => {
-      const name = dev.deviceName || dev.name || "Unnamed";
-      // Convert powerRating to kW
-      let powerKW = 0;
-      if (dev.powerRating && dev.powerRating.value) {
-        powerKW =
-          Number(dev.powerRating.value) /
-          (dev.powerRating.unit === "W" ? 1000 : 1);
+    // Compute consumption for each device (multiplying by quantity)
+    const consumptionPerDevice = filteredDevices.map((dev) => {
+      if (!dev.room || (!dev.room.roomName && typeof dev.room !== "string")) {
+        return null;
       }
-      // Convert standbyPower to kW
-      let standbyKW = 0;
-      if (dev.standbyPower && dev.standbyPower.value) {
-        standbyKW =
-          Number(dev.standbyPower.value) /
-          (dev.standbyPower.unit === "W" ? 1000 : 1);
-      }
-      // Calculate average active hours
-      let avgActiveHours = 1; // fallback
+      const powerKW =
+        dev.powerRating && dev.powerRating.value
+          ? Number(dev.powerRating.value) / (dev.powerRating.unit === "W" ? 1000 : 1)
+          : 0;
+      const standbyKW =
+        dev.standbyPower && dev.standbyPower.value
+          ? Number(dev.standbyPower.value) / (dev.standbyPower.unit === "W" ? 1000 : 1)
+          : 0;
+
+      let avgActiveHours = 1;
       if (
         dev.usagePattern &&
         Array.isArray(dev.usagePattern.usage_times) &&
@@ -177,26 +173,40 @@ const RecommendationsScreen: React.FC = () => {
           const end = dayjs(ut.end);
           if (!start.isValid() || !end.isValid()) return 0;
           let h = end.diff(start, "hour", true);
-          // If negative => overnight => add 24
-          if (h < 0) {
-            h += 24;
-          }
-          // clamp
-          if (h < 0) h = 0;
-          if (h > 24) h = 24;
-          return h;
+          if (h < 0) h += 24;
+          return Math.max(0, Math.min(24, h));
         });
-        avgActiveHours =
-          hoursArr.reduce((a: number, b: number) => a + b, 0) / hoursArr.length;
+        avgActiveHours = hoursArr.reduce((a: number, b: number) => a + b, 0) / hoursArr.length;
       }
-      // active + standby consumption
       const activeConsumption = powerKW * avgActiveHours;
       const standbyConsumption = standbyKW * (24 - avgActiveHours);
       const totalDaily = activeConsumption + standbyConsumption;
-      return { name, consumption: totalDaily };
+      const quantity = Number(dev.quantity) || 1;
+      return { room: dev.room, consumption: totalDaily * quantity };
     });
 
-    setDevicesConsumption(consumptionArray);
+    const roomMap = new Map<string, number>();
+    consumptionPerDevice.forEach((item) => {
+      if (item && item.room) {
+        let roomName = "";
+        let roomType = "";
+        if (typeof item.room === "object") {
+          roomName = item.room.roomName || "";
+          roomType = item.room.roomType || "";
+        } else {
+          roomName = item.room;
+        }
+        const key = `${roomName}||${roomType}`;
+        const prev = roomMap.get(key) || 0;
+        roomMap.set(key, prev + item.consumption);
+      }
+    });
+    const consumptionArray = Array.from(roomMap.entries()).map(([key, consumption]) => {
+      const [roomName, roomType] = key.split("||");
+      const displayName = roomType ? `${roomName} (${roomType})` : roomName;
+      return { name: displayName, consumption };
+    });
+    setRoomsConsumption(consumptionArray);
   }, []);
 
   // Colors for the pie chart
@@ -212,6 +222,18 @@ const RecommendationsScreen: React.FC = () => {
     }
   };
 
+  // Toggle button style
+  const toggleBtnSx = {
+    textTransform: "none",
+    width: 36,
+    height: 36,
+    borderRadius: "50%",
+    fontSize: "14px",
+    fontWeight: "bold",
+    border: "none",
+    transition: "background-color 0.2s ease-in-out",
+  };
+
   return (
     <Box
       sx={{
@@ -219,21 +241,21 @@ const RecommendationsScreen: React.FC = () => {
         maxWidth: 600,
         mx: "auto",
         p: isMobile ? 2 : 3,
+        pb: 10, // <-- Increased bottom padding so the navigation won't overlap
         backgroundColor: "#fff",
-        fontFamily: "Roboto, sans-serif",
       }}
     >
       {/* Header */}
       <Box sx={{ width: "100%", mb: 3 }}>
-        <Typography variant="h5" sx={{ fontWeight: 600, mb: 1 }}>
+        <Typography variant="h6" fontWeight="bold" sx={{ mb: 1 }}>
           Recommendations
         </Typography>
-        <Typography variant="body2" sx={{ color: "gray", mt: 0.5, fontSize: "0.9rem" }}>
+        <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 3 }}>
           Your Personalized Energy-Saving Tips
         </Typography>
       </Box>
 
-      {/* Pie Chart for Energy Consumption by Device */}
+      {/* Pie Chart for Energy Consumption by Room */}
       <Box
         sx={{
           mb: 3,
@@ -244,12 +266,12 @@ const RecommendationsScreen: React.FC = () => {
         }}
       >
         <Typography variant="subtitle1" sx={{ fontWeight: 400, mb: 1 }}>
-          Energy Consumption by Device
+          Energy Consumption by Room
         </Typography>
-        {devicesConsumption.length > 0 ? (
+        {roomsConsumption.length > 0 ? (
           <PieChart width={320} height={320}>
             <Pie
-              data={devicesConsumption}
+              data={roomsConsumption}
               dataKey="consumption"
               nameKey="name"
               cx="50%"
@@ -258,16 +280,11 @@ const RecommendationsScreen: React.FC = () => {
               animationDuration={1000}
               animationEasing="ease-out"
             >
-              {devicesConsumption.map((entry, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={pieColors[index % pieColors.length]}
-                />
+              {roomsConsumption.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={pieColors[index % pieColors.length]} />
               ))}
             </Pie>
-            {/* On hover, show consumption with 2 decimals */}
             <RechartsTooltip formatter={(value: number) => `${value.toFixed(2)} kWh`} />
-            {/* Legend on bottom listing device names */}
             <RechartsLegend
               verticalAlign="bottom"
               align="center"
@@ -276,21 +293,22 @@ const RecommendationsScreen: React.FC = () => {
             />
           </PieChart>
         ) : (
-          <Typography variant="body2">No device data available.</Typography>
+          <Typography variant="body2">
+            No room consumption data available.
+          </Typography>
         )}
       </Box>
 
       {/* Suggestions */}
       <Box sx={{ width: "100%", mb: 4 }}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
-          Today’s suggestions
+        <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>
+          Today’s Suggestions
         </Typography>
         <Box
           sx={{
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
             gap: "1rem",
-            alignItems: "start",
           }}
         >
           <Tile
@@ -334,55 +352,68 @@ const RecommendationsScreen: React.FC = () => {
             mb: 2,
           }}
         >
-          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+          <Typography variant="h6" fontWeight="bold">
             Efficiency Gains
           </Typography>
           <ToggleButtonGroup
-            color="primary"
             value={timeframe}
             exclusive
             onChange={handleTimeframeChange}
             sx={{
-              display: "inline-flex",
-              alignItems: "center",
-              borderRadius: "9999px",
               backgroundColor: "#F8F8F8",
               border: "1px solid #ddd",
               p: 0.5,
-              "& .MuiToggleButton-root": {
-                borderRadius: "17px",
-                border: "none",
-                textTransform: "none",
-                fontFamily: "inherit",
-                fontSize: "0.9rem",
-                color: "#666",
-                minWidth: 40,
-                padding: "2px",
-                margin: "0px 5px",
-                lineHeight: 1.2,
-                "&:hover": { backgroundColor: "#ECECEC" },
-                "&.Mui-selected": {
-                  backgroundColor: "#5A9FA3",
-                  color: "#fff",
-                  "&:hover": { backgroundColor: "#4a868a" },
-                },
-                "&:not(:last-of-type)": { position: "relative" },
-                "&:not(:last-of-type)::after": {
-                  content: '""',
-                  position: "absolute",
-                  top: "20%",
-                  right: -5,
-                  height: "60%",
-                  width: "1px",
-                  marginLeft: "5px",
-                  backgroundColor: "#ccc",
-                },
-              },
+              borderRadius: "9999px",
             }}
           >
-            <ToggleButton value="week">W</ToggleButton>
-            <ToggleButton value="month">M</ToggleButton>
-            <ToggleButton value="year">Y</ToggleButton>
+            <ToggleButton
+              value="week"
+              disableRipple
+              sx={{
+                ...toggleBtnSx,
+                backgroundColor:
+                  timeframe === "week" ? "#6B97A4 !important" : "#F5F5F5 !important",
+                color: timeframe === "week" ? "#fff" : "#000",
+                "&:hover": {
+                  backgroundColor:
+                    timeframe === "week" ? "#6B97A4 !important" : "#F5F5F5 !important",
+                },
+              }}
+            >
+              W
+            </ToggleButton>
+            <ToggleButton
+              value="month"
+              disableRipple
+              sx={{
+                ...toggleBtnSx,
+                backgroundColor:
+                  timeframe === "month" ? "#6B97A4 !important" : "#F5F5F5 !important",
+                color: timeframe === "month" ? "#fff" : "#000",
+                "&:hover": {
+                  backgroundColor:
+                    timeframe === "month" ? "#6B97A4 !important" : "#F5F5F5 !important",
+                },
+              }}
+            >
+              M
+            </ToggleButton>
+            <ToggleButton
+              value="year"
+              disableRipple
+              sx={{
+                ...toggleBtnSx,
+                backgroundColor:
+                  timeframe === "year" ? "#6B97A4 !important" : "#F5F5F5 !important",
+                color: timeframe === "year" ? "#fff" : "#000",
+                "&:hover": {
+                  backgroundColor:
+                    timeframe === "year" ? "#6B97A4 !important" : "#F5F5F5 !important",
+                },
+              }}
+            >
+              Y
+            </ToggleButton>
           </ToggleButtonGroup>
         </Box>
 
@@ -430,9 +461,14 @@ const RecommendationsScreen: React.FC = () => {
           </ResponsiveContainer>
         </Box>
 
-        {/* Legend for the line chart */}
         <Box
-          sx={{ display: "flex", alignItems: "center", gap: 2, justifyContent: "center", mt: 1 }}
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+            justifyContent: "center",
+            mt: 1,
+          }}
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
             <Box sx={{ width: 10, height: 10, borderRadius: "50%", backgroundColor: "#5A9FA3" }} />

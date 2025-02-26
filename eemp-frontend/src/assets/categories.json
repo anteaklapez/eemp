@@ -2,23 +2,23 @@
   "categories": [
     {
       "name": "Appliances",
-      "icon": "/assets/icons/washing-machine-svgrepo-com.svg"
+      "icon": "/assets/icons/Appliances.svg"
     },
     {
       "name": "Lighting",
-      "icon": "/assets/icons/sun-svgrepo-com.svg"
+      "icon": "/assets/icons/Lighting.svg"
     },
     {
       "name": "HVAC",
-      "icon": "/assets/icons/airconditioning-o-svgrepo-com.svg"
+      "icon": "/assets/icons/HVAC.svg"
     },
     {
       "name": "Production Devices",
-      "icon": "/assets/icons/production-icon.svg"
+      "icon": "/assets/icons/Production_Devices.svg"
     },
     {
       "name": "Solar Panel",
-      "icon": "/assets/icons/production-icon.svg"
+      "icon": "/assets/icons/Solar_Panel.svg"
     }
   ],
   "defaultIcon": "/assets/icons/default-icon.svg"
