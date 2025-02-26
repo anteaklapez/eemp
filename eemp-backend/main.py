@@ -1,9 +1,9 @@
 from fastapi import FastAPI
 from pvlib.pvsystem import retrieve_sam
-from router_solar import router as router_solar
-from router_weather import router as router_weather
-from router_predictions import router as router_predictions
-from router_recommendations import router as router_recommendations
+import router_solar
+import router_weather
+import router_predictions
+import router_recommendations
 import logging
 import os
 
