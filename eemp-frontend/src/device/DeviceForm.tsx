@@ -76,7 +76,6 @@ export interface FormData {
   manufacturerModel?: string;
   powerConsumption?: string;
   unit?: string;
-  frequency?: string;
   duration?: string;
   peakHoursStart?: Dayjs | null;
   peakHoursEnd?: Dayjs | null;
@@ -121,7 +120,6 @@ const DeviceForm: React.FC = () => {
     manufacturerModel: "",
     powerConsumption: "",
     unit: "",
-    frequency: "",
     duration: "",
     location: "",
     environment: "",
@@ -191,19 +189,16 @@ const DeviceForm: React.FC = () => {
   const [openError, setOpenError] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
-  // Combine module lists from both sources
+  // Define modulesList here once so it runs every render in the same order.
   const modulesList = useMemo(() => [...cecModules, ...sandiaModules], []);
 
   // ---------------- Effects ----------------
   useEffect(() => {
     if (location.state?.device) {
-      // Cast device as any to access extra properties
       const device = location.state.device as any;
-      // Use both keys: for solar panels, the stored object has category, for normal devices, deviceCategory
       if (device.category === "Solar Panel" || device.deviceCategory === "Solar Panel") {
         setFormData({
           ...device,
-          // For solar panels we use the same keys already in formData:
           peakHoursStart: device.peakHoursStart ? dayjs(device.peakHoursStart) : null,
           peakHoursEnd: device.peakHoursEnd ? dayjs(device.peakHoursEnd) : null,
           weekStart: device.weekStart ? dayjs(device.weekStart) : dayjs(),
@@ -218,13 +213,11 @@ const DeviceForm: React.FC = () => {
               })),
         });
       } else {
-        // Normal device: map stored properties to our form's fields.
         setFormData({
           category: device.deviceCategory,
           name: device.deviceName,
           powerRatingValue: device.powerRating?.value?.toString() || "",
           powerRatingUnit: device.powerRating?.unit || "W",
-          frequency: device.usagePattern?.frequency_value?.toString() || "",
           weekStart: device.weekStart
             ? dayjs(device.weekStart)
             : device.usagePattern?.usage_times?.[0]?.start
@@ -242,7 +235,6 @@ const DeviceForm: React.FC = () => {
           energyType: device.energyType || "AC",
           standbyPowerValue: device.standbyPower?.value?.toString() || "",
           standbyPowerUnit: device.standbyPower?.unit || "W",
-          // When updating, do not allow editing the number of devices.
           roomName: device.room?.roomName || "",
           roomType: device.room?.roomType || "",
           roomId: device.room?.roomId || "",
@@ -296,9 +288,11 @@ const DeviceForm: React.FC = () => {
                 alpha_absorption: 0,
               },
             };
+
             const currentSolarData = prev.customSolarPanelData
               ? { ...defaultSolarPanelData, ...prev.customSolarPanelData }
               : defaultSolarPanelData;
+
             return {
               ...prev,
               customSolarPanelData: {
@@ -362,6 +356,11 @@ const DeviceForm: React.FC = () => {
   // ---------------- Handlers ----------------
   const handleChange = (field: keyof FormData, value: any) => {
     setFormData({ ...formData, [field]: value });
+  };
+
+  // New Cancel handler: Navigates back to management screen.
+  const handleCancel = () => {
+    navigate("/management");
   };
 
   // ---------------- Validation ----------------
@@ -435,7 +434,6 @@ const DeviceForm: React.FC = () => {
     const requiredFields: (keyof FormData)[] = [
       "name",
       "powerRatingValue",
-      "frequency",
       "weekStart",
       "energyType",
       "standbyPowerValue",
@@ -492,14 +490,7 @@ const DeviceForm: React.FC = () => {
             </Select>
           </FormControl>
         </Box>
-        <TextField
-          label="Usage Frequency (days)"
-          type="number"
-          value={formData.frequency}
-          onChange={(e) => handleChange("frequency", e.target.value)}
-          fullWidth
-          sx={{ mb: 2 }}
-        />
+        {/* Removed "Usage Frequency (days)" TextField */}
         <TextField
           label="Week Start Date"
           type="date"
@@ -583,8 +574,7 @@ const DeviceForm: React.FC = () => {
             </Select>
           </FormControl>
         </Box>
-        {/* Render "Number of Devices" only when adding a new normal device */}
-        { !isEditing && (
+        {formData.category !== "Solar Panel" && !isEditing && (
           <TextField
             label="Number of Devices"
             type="number"
@@ -631,22 +621,19 @@ const DeviceForm: React.FC = () => {
       const baseSolarData = {
         ...formData,
         lastUpdated: new Date().toISOString(),
-        // Use a default tilt for non-manual solar panel entries
         tilt: formData.category === "Solar Panel" && !manualEntry ? "30.0" : formData.tilt,
       };
 
       if (isEditing && editingIndex !== null) {
         existingDevices[editingIndex] = baseSolarData;
       } else {
-        // If adding, you could add multiple devices if desired.
         const count = Number(formData.numberOfDevices) || 1;
-        for (let i = 0; i < count; i++) {
-          const newDevice = {
-            ...baseSolarData,
-            id: Number(`${Date.now()}${Math.floor(Math.random() * 1000)}`),
-          };
-          existingDevices.push(newDevice);
-        }
+        const newDevice = {
+          ...baseSolarData,
+          quantity: count,
+          id: Number(`${Date.now()}${Math.floor(Math.random() * 1000)}`),
+        };
+        existingDevices.push(newDevice);
       }
       localStorage.setItem("devices", JSON.stringify(existingDevices));
     } else {
@@ -657,8 +644,6 @@ const DeviceForm: React.FC = () => {
           unit: formData.powerRatingUnit,
         },
         usagePattern: {
-          frequency_unit: "days",
-          frequency_value: Number(formData.frequency),
           usage_times: formData.usageTimes
             ? formData.usageTimes.map((time) => ({
                 start: time.start.toISOString(),
@@ -691,18 +676,17 @@ const DeviceForm: React.FC = () => {
         };
       } else {
         const count = Number(formData.numberOfDevices) || 1;
-        for (let i = 0; i < count; i++) {
-          const newDevice = {
-            ...baseNormalData,
-            deviceId: String(`${Date.now()}${Math.floor(Math.random() * 1000)}`),
-            room: {
-              roomId: String(`${Date.now()}${Math.floor(Math.random() * 1000)}`),
-              roomName: formData.roomName,
-              roomType: formData.roomType,
-            },
-          };
-          existingDevices.push(newDevice);
-        }
+        const newDevice = {
+          ...baseNormalData,
+          quantity: count,
+          deviceId: String(`${Date.now()}${Math.floor(Math.random() * 1000)}`),
+          room: {
+            roomId: String(`${Date.now()}${Math.floor(Math.random() * 1000)}`),
+            roomName: formData.roomName,
+            roomType: formData.roomType,
+          },
+        };
+        existingDevices.push(newDevice);
       }
       localStorage.setItem("devices", JSON.stringify(existingDevices));
     }
@@ -833,7 +817,7 @@ const DeviceForm: React.FC = () => {
           renderGenericForm()
         )}
 
-        <Box sx={{ mb: 4 }}>
+        <Box sx={{ display: "flex", gap: 2, mb: 4 }}>
           <Button
             variant="contained"
             color="primary"
@@ -842,6 +826,9 @@ const DeviceForm: React.FC = () => {
             onClick={handleSubmit}
           >
             {isEditing ? "Update" : "Save"}
+          </Button>
+          <Button variant="outlined" color="primary" fullWidth onClick={handleCancel}>
+            Cancel
           </Button>
         </Box>
       </Box>

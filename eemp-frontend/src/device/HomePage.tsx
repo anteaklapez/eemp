@@ -17,24 +17,49 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-// WEEK / MONTH / YEAR data for CONSUMPTION
-const consumptionDataWeek = [
+// ---------------- DATA DEFINITIONS ----------------
+
+// Daily data: 24 hours (AM/PM format)
+const dayData = [
+  { name: "12 AM", value: 3 },
+  { name: "1 AM", value: 2 },
+  { name: "2 AM", value: 2 },
+  { name: "3 AM", value: 1 },
+  { name: "4 AM", value: 1 },
+  { name: "5 AM", value: 1 },
+  { name: "6 AM", value: 2 },
+  { name: "7 AM", value: 3 },
+  { name: "8 AM", value: 4 },
+  { name: "9 AM", value: 6 },
+  { name: "10 AM", value: 8 },
+  { name: "11 AM", value: 7 },
+  { name: "12 PM", value: 9 },
+  { name: "1 PM", value: 6 },
+  { name: "2 PM", value: 5 },
+  { name: "3 PM", value: 6 },
+  { name: "4 PM", value: 8 },
+  { name: "5 PM", value: 7 },
+  { name: "6 PM", value: 5 },
+  { name: "7 PM", value: 5 },
+  { name: "8 PM", value: 4 },
+  { name: "9 PM", value: 3 },
+  { name: "10 PM", value: 3 },
+  { name: "11 PM", value: 2 },
+];
+
+// Weekly data: 7 days
+const weekData = [
   { name: "Mon", value: 15 },
   { name: "Tue", value: 18 },
   { name: "Wed", value: 25 },
   { name: "Thu", value: 22 },
   { name: "Fri", value: 30 },
+  { name: "Sat", value: 28 },
+  { name: "Sun", value: 20 },
 ];
-const consumptionDataMonth = [
-  { name: "Apr", value: 20 },
-  { name: "May", value: 15 },
-  { name: "Jun", value: 25 },
-  { name: "Jul", value: 35 },
-  { name: "Aug", value: 40 },
-  { name: "Sep", value: 30 },
-  { name: "Oct", value: 45 },
-];
-const consumptionDataYear = [
+
+// Yearly data: 12 months
+const yearData = [
   { name: "Jan", value: 10 },
   { name: "Feb", value: 12 },
   { name: "Mar", value: 20 },
@@ -48,98 +73,129 @@ const consumptionDataYear = [
   { name: "Nov", value: 28 },
   { name: "Dec", value: 35 },
 ];
+
 const consumptionDataSets = {
-  week: consumptionDataWeek,
-  month: consumptionDataMonth,
-  year: consumptionDataYear,
+  day: dayData,
+  week: weekData,
+  year: yearData,
 };
 
-// WEEK / MONTH / YEAR data for PRODUCTION
-const productionDataWeek = [
-  { name: "Mon", value: 10 },
-  { name: "Tue", value: 12 },
-  { name: "Wed", value: 18 },
-  { name: "Thu", value: 40 },
-  { name: "Fri", value: 25 },
-  { name: "Sat", value: 22 },
-  { name: "Sun", value: 15 },
-];
-const productionDataMonth = [
-  { name: "Apr", value: 10 },
-  { name: "May", value: 12 },
-  { name: "Jun", value: 18 },
-  { name: "Jul", value: 40 },
-  { name: "Aug", value: 50 },
-  { name: "Sep", value: 20 },
-  { name: "Oct", value: 55 },
-];
-const productionDataYear = [
-  { name: "Jan", value: 5 },
-  { name: "Feb", value: 10 },
-  { name: "Mar", value: 12 },
-  { name: "Apr", value: 18 },
-  { name: "May", value: 22 },
-  { name: "Jun", value: 28 },
-  { name: "Jul", value: 35 },
-  { name: "Aug", value: 50 },
-  { name: "Sep", value: 20 },
-  { name: "Oct", value: 55 },
-  { name: "Nov", value: 15 },
-  { name: "Dec", value: 25 },
-];
 const productionDataSets = {
-  week: productionDataWeek,
-  month: productionDataMonth,
-  year: productionDataYear,
+  day: dayData.map((d) => ({ name: d.name, value: d.value * 0.8 })),
+  week: weekData.map((d) => ({ name: d.name, value: d.value * 0.9 })),
+  year: yearData.map((d) => ({ name: d.name, value: d.value * 0.85 })),
 };
 
 const DashboardPage: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
-  // Toggles between “consumption” or “production”
+  // Mode toggle: consumption or production
   const [mode, setMode] = useState<"consumption" | "production">("consumption");
-  // Toggles between “week” | “month” | “year”
-  const [timeframe, setTimeframe] = useState<"week" | "month" | "year">("month");
+  // Timeframe toggle: day, week, or year
+  const [timeframe, setTimeframe] = useState<"day" | "week" | "year">("day");
 
-  // Data for the bar chart based on current mode + timeframe
+  // Determine which dataset to show
   const currentData =
     mode === "consumption"
       ? consumptionDataSets[timeframe]
       : productionDataSets[timeframe];
 
-  // For the displayed total kWh (example numbers)
+  // Example total kWh
   const totalKwh =
     mode === "consumption"
-      ? timeframe === "week"
-        ? 150
-        : timeframe === "month"
-        ? 400
+      ? timeframe === "day"
+        ? 50
+        : timeframe === "week"
+        ? 300
         : 1200
+      : timeframe === "day"
+      ? 40
       : timeframe === "week"
-      ? 100
-      : timeframe === "month"
       ? 250
       : 700;
 
-  // Switch consumption <-> production
   const handleModeChange = (
     event: React.MouseEvent<HTMLElement>,
     newValue: "consumption" | "production" | null
   ) => {
-    if (newValue) {
-      setMode(newValue);
-    }
+    if (newValue) setMode(newValue);
   };
 
-  // Switch chart timeframe
   const handleTimeframeChange = (
     event: React.MouseEvent<HTMLElement>,
-    newValue: "week" | "month" | "year" | null
+    newValue: "day" | "week" | "year" | null
   ) => {
-    if (newValue) {
-      setTimeframe(newValue);
-    }
+    if (newValue) setTimeframe(newValue);
+  };
+
+  // Chart width based on data length
+  const chartWidth =
+    timeframe === "day"
+      ? currentData.length * 40 // 24 bars -> 960px
+      : currentData.length * 80; // e.g. 7 bars -> 560px, 12 bars -> 960px
+
+  // Toggle button base styles
+  const toggleBtnSx = {
+    textTransform: "none",
+    width: 36,
+    height: 36,
+    borderRadius: "50%",
+    fontSize: "14px",
+    fontWeight: "bold",
+    border: "none",
+    transition: "background-color 0.2s ease-in-out",
+    fontFamily: "Roboto, sans-serif",
+  };
+
+  // Mode toggle (Consumption/Production)
+  const modeToggleStyles = {
+    backgroundColor: "#F8F8F8",
+    border: "1px solid #ddd",
+    p: 0.5,
+    borderRadius: "9999px",
+    "& .MuiToggleButton-root": {
+      ...toggleBtnSx,
+      borderRadius: "17px",
+      textTransform: "none",
+      fontFamily: "inherit",
+      fontSize: "0.9rem",
+      color: "#666",
+      minWidth: 110,
+      padding: "5px",
+      margin: "0 5px",
+      "&:hover": { backgroundColor: "#ECECEC" },
+      "&.Mui-selected": {
+        backgroundColor: "#6B97A4",
+        color: "#fff",
+        "&:hover": { backgroundColor: "#6B97A4" },
+      },
+    },
+  };
+
+  // Timeframe toggle (Day/Week/Year)
+  const timeframeToggleStyles = {
+    backgroundColor: "#F8F8F8",
+    border: "1px solid #ddd",
+    p: 0.5,
+    borderRadius: "9999px",
+    "& .MuiToggleButton-root": {
+      ...toggleBtnSx,
+      borderRadius: "17px",
+      textTransform: "none",
+      fontFamily: "inherit",
+      fontSize: "0.9rem",
+      color: "#666",
+      minWidth: 50,
+      padding: "5px",
+      margin: "0 5px",
+      "&:hover": { backgroundColor: "#ECECEC" },
+      "&.Mui-selected": {
+        backgroundColor: "#6B97A4",
+        color: "#fff",
+        "&:hover": { backgroundColor: "#6B97A4" },
+      },
+    },
   };
 
   return (
@@ -149,206 +205,135 @@ const DashboardPage: React.FC = () => {
         maxWidth: 600,
         mx: "auto",
         p: isMobile ? 2 : 3,
+        pb: 10,
         backgroundColor: "#fff",
+        fontFamily: "Roboto, sans-serif",
       }}
     >
-      {/* Welcome / Intro Section */}
+      {/* Top (centered) */}
       <Box sx={{ textAlign: "center", mb: 4 }}>
-        <Typography variant="h5" sx={{ fontWeight: 600, mb: 1 }}>
+        <Typography
+          variant="h6"
+          fontWeight="bold"
+          sx={{ mb: 1, fontFamily: "inherit" }}
+        >
           Welcome!
         </Typography>
-        <Typography variant="h6" sx={{ fontWeight: 400, mb: 1 }}>
-          You’ve Saved{" "}
-          <Box component="span" sx={{ fontWeight: 700 }}>
-            10% More
-          </Box>{" "}
-          Energy This Month! <span role="img" aria-label="celebration">🎉</span>
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ fontSize: "1rem", fontFamily: "inherit" }}
+        >
+          Check out your energy consumption or production below.
         </Typography>
-        <Typography variant="body2" sx={{ color: "gray", fontSize: "1rem" }}>
-          You’re making a positive impact! Keep going to save even more.
-        </Typography>
-        <Box sx={{ mt: 3 }}>
-          <Button
-            variant="contained"
-            sx={{
-              backgroundColor: "#5A9FA3",
-              color: "#fff",
-              textTransform: "none",
-              fontSize: "1rem",
-              fontWeight: 500,
-              borderRadius: 2,
-              px: 4,
-              py: 1.2,
-              "&:hover": {
-                backgroundColor: "#4a868a",
-              },
-            }}
-          >
-            Save more
-          </Button>
-        </Box>
       </Box>
 
-      {/* Overview Section */}
-      <Box sx={{ width: "100%", mb: 4 }}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+      {/* Overview (left-aligned) */}
+      <Box sx={{ textAlign: "left", mb: 4 }}>
+        <Typography
+          variant="h6"
+          fontWeight="bold"
+          sx={{ mb: 2, fontFamily: "inherit" }}
+        >
           Overview
         </Typography>
 
         {/* Consumption vs Production Toggle */}
         <ToggleButtonGroup
-          color="primary"
           value={mode}
           exclusive
           onChange={handleModeChange}
-          sx={{
-            display: "inline-flex",
-            alignItems: "center",
-            borderRadius: "17px",
-            backgroundColor: "#F8F8F8",
-            border: "1px solid #ddd",
-            p: 0.5,
-            "& .MuiToggleButton-root": {
-              borderRadius: "17px",
-              border: "none",
-              textTransform: "none",
-              fontFamily: "inherit",
-              fontSize: "0.9rem",
-              color: "#666",
-              minWidth: 110,
-              padding: "5px",
-              margin: "0px 5px",
-              lineHeight: 1.2,
-              "&:hover": {
-                backgroundColor: "#ECECEC",
-              },
-              "&.Mui-selected": {
-                backgroundColor: "#5A9FA3",
-                color: "#fff",
-                "&:hover": {
-                  backgroundColor: "#4a868a",
-                },
-              },
-              "&:not(:last-of-type)": {
-                position: "relative",
-              },
-              "&:not(:last-of-type)::after": {
-                content: '""',
-                position: "absolute",
-                top: "20%",
-                right: -5,
-                height: "60%",
-                width: "1px",
-                marginLeft: "5px",
-                backgroundColor: "#ccc",
-              },
-            },
-          }}
+          sx={{ ...modeToggleStyles, mb: 2 }}
         >
           <ToggleButton value="consumption">Consumption</ToggleButton>
           <ToggleButton value="production">Production</ToggleButton>
         </ToggleButtonGroup>
 
-        <Typography variant="h6" sx={{ fontWeight: 600, mt: 2, mb: 2 }}>
+        <Typography
+          variant="h6"
+          fontWeight="bold"
+          sx={{ mb: 2, fontFamily: "inherit" }}
+        >
           {mode === "consumption"
             ? `Total Consumption: ${totalKwh} kWh`
             : `Total Production: ${totalKwh} kWh`}
         </Typography>
 
-        {/* Timeframe Toggle */}
+        {/* Timeframe Toggle (D/W/Y) */}
         <ToggleButtonGroup
           value={timeframe}
           exclusive
           onChange={handleTimeframeChange}
+          sx={timeframeToggleStyles}
+        >
+          <ToggleButton value="day">D</ToggleButton>
+          <ToggleButton value="week">W</ToggleButton>
+          <ToggleButton value="year">Y</ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
+
+      {/* Bar Chart Section */}
+      <Box
+        sx={{
+          width: "100%",
+          mb: 4,
+          overflowX: "auto",
+          scrollBehavior: "smooth",
+          "&::-webkit-scrollbar": { display: "none" },
+          scrollbarWidth: "none",
+        }}
+        onWheel={(e) => {
+          e.preventDefault();
+          (e.currentTarget as HTMLDivElement).scrollLeft += e.deltaY;
+        }}
+      >
+        <Box
           sx={{
-            display: "inline-flex",
-            alignItems: "center",
-            borderRadius: "17px",
-            backgroundColor: "#F8F8F8",
-            border: "1px solid #ddd",
-            p: 0.5,
-            "& .MuiToggleButton-root": {
-              borderRadius: "17px",
-              border: "none",
-              textTransform: "none",
-              fontFamily: "inherit",
-              fontSize: "0.9rem",
-              color: "#666",
-              minWidth: 50,
-              padding: "5px",
-              margin: "0px 5px",
-              lineHeight: 1.2,
-              "&:hover": {
-                backgroundColor: "#ECECEC",
-              },
-              "&.Mui-selected": {
-                backgroundColor: "#5A9FA3",
-                color: "#fff",
-                "&:hover": {
-                  backgroundColor: "#4a868a",
-                },
-              },
-              "&:not(:last-of-type)": {
-                position: "relative",
-              },
-              "&:not(:last-of-type)::after": {
-                content: '""',
-                position: "absolute",
-                top: "20%",
-                right: -5,
-                height: "60%",
-                width: "1px",
-                marginLeft: "5px",
-                backgroundColor: "#ccc",
-              },
-            },
+            width: chartWidth,
+            height: 200,
+            display: "flex",
+            mx: chartWidth < 600 ? "auto" : 0, // center if narrower than container
           }}
         >
-          <ToggleButton value="week">Week</ToggleButton>
-          <ToggleButton value="month">Month</ToggleButton>
-          <ToggleButton value="year">Year</ToggleButton>
-        </ToggleButtonGroup>
-
-        {/* Bar Chart */}
-        <Box sx={{ width: "100%", height: 200, mt: 2 }}>
-          <ResponsiveContainer>
-            <BarChart
-              data={
-                mode === "consumption"
-                  ? consumptionDataSets[timeframe]
-                  : productionDataSets[timeframe]
-              }
-              margin={{ top: 5, right: 15, left: 0, bottom: 5 }}
-            >
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={currentData} margin={{ top: 5, right: 15, left: 0, bottom: 5 }}>
               <YAxis hide />
               <XAxis
                 dataKey="name"
                 tickLine={false}
                 axisLine={false}
-                tick={{ fontSize: 12, fill: "#666", fontFamily: "inherit" }}
+                tick={{
+                  fontSize: 12,
+                  fill: "#666",
+                  fontFamily: "Roboto, sans-serif",
+                }}
               />
               <Tooltip
                 contentStyle={{
                   borderRadius: "8px",
                   border: "1px solid #ccc",
-                  fontFamily: "inherit",
+                  fontFamily: "Roboto, sans-serif",
                 }}
               />
-              <Bar dataKey="value" fill="#5A9FA3" barSize={12} radius={[4, 4, 0, 0]} />
+              <Bar
+                dataKey="value"
+                fill="#5A9FA3"
+                barSize={12}
+                radius={[4, 4, 0, 0]}
+              />
             </BarChart>
           </ResponsiveContainer>
         </Box>
       </Box>
 
       {/* Bottom Tiles */}
-      <Box sx={{ width: "100%", px: 3, mb: 4 }}>
+      <Box sx={{ textAlign: "left", mb: 4 }}>
         {mode === "consumption" ? (
           <Box
             sx={{
               display: "grid",
               gridTemplateColumns: "1fr 1fr",
               gap: "1rem",
-              alignItems: "start",
             }}
           >
             <Box
@@ -358,6 +343,7 @@ const DashboardPage: React.FC = () => {
                 borderRadius: 2,
                 border: "1px solid #e0e0e0",
                 textAlign: "center",
+                fontFamily: "inherit",
               }}
             >
               <Typography variant="body2" sx={{ color: "#888", mb: 1 }}>
@@ -374,6 +360,7 @@ const DashboardPage: React.FC = () => {
                 borderRadius: 2,
                 border: "1px solid #e0e0e0",
                 textAlign: "center",
+                fontFamily: "inherit",
               }}
             >
               <Typography variant="body2" sx={{ color: "#888", mb: 1 }}>
@@ -390,6 +377,7 @@ const DashboardPage: React.FC = () => {
                 borderRadius: 2,
                 border: "1px solid #e0e0e0",
                 textAlign: "center",
+                fontFamily: "inherit",
               }}
             >
               <Typography variant="body2" sx={{ color: "#888", mb: 1 }}>
@@ -406,6 +394,7 @@ const DashboardPage: React.FC = () => {
                 borderRadius: 2,
                 border: "1px solid #e0e0e0",
                 textAlign: "center",
+                fontFamily: "inherit",
               }}
             >
               <Typography variant="body2" sx={{ color: "#888", mb: 1 }}>
@@ -424,9 +413,8 @@ const DashboardPage: React.FC = () => {
               borderRadius: 2,
               border: "1px solid #e0e0e0",
               textAlign: "center",
-              mb: 2,
               maxWidth: 300,
-              mx: "auto",
+              fontFamily: "inherit",
             }}
           >
             <Typography variant="body2" sx={{ color: "#888", mb: 1 }}>
