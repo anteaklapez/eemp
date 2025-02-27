@@ -5,8 +5,8 @@ from openweatherapi_service import get_weather, get_daily_weather, get_hourly_we
 from location_models import LocationData
 import os
 
-redis_client = redis.StrictRedis(host=os.getenv('REDIS_URL'), port=os.getenv('REDISPORT'), decode_responses=True)
-
+redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
 
 def generate_cache_key(prefix: str, params: dict) -> str:
     """
