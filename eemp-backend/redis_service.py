@@ -4,10 +4,13 @@ import hashlib
 from openweatherapi_service import get_weather, get_daily_weather, get_hourly_weather
 from location_models import LocationData
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 redis_client = redis.StrictRedis(
     host=os.getenv('REDISHOST'),
-    port=os.getenv('REDISPORT'),
+    port=int(os.getenv('REDISPORT')),
     password=os.getenv('REDISPASSWORD'),
     decode_responses=True
 )
