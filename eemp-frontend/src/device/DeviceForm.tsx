@@ -17,7 +17,6 @@ import {
 import { useNavigate, useLocation } from "react-router-dom";
 import dayjs, { Dayjs } from "dayjs";
 import categoriesData from "../assets/categories.json";
-import locationsData from "../assets/locations.json"; // not used directly here
 import cecModules from "../assets/cec_modules.json";
 import sandiaModules from "../assets/sandia_modules.json";
 import cecInverters from "../assets/cec_inverters.json";

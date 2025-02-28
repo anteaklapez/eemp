@@ -21,7 +21,6 @@ import {
   Legend,
 } from "chart.js";
 import { useNavigate, useParams } from "react-router-dom";
-import dayjs from "dayjs";
 
 import WbSunnyIcon from "@mui/icons-material/WbSunny";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";

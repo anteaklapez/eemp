@@ -266,8 +266,6 @@ const DeviceDetails: React.FC = () => {
   const lastUpdatedString = lastUpdatedDate.toLocaleString();
 
   // Remove device logic
-  const handleOpenRemoveDialog = () => setOpenRemoveDialog(true);
-  const handleCloseRemoveDialog = () => setOpenRemoveDialog(false);
   const handleConfirmRemove = () => {
     const storedDevices = JSON.parse(localStorage.getItem("devices") || "[]");
     const updatedDevices = storedDevices.filter((d: any) => d.deviceId !== device.deviceId);

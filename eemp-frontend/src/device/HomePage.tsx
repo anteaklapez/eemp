@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import axios from "axios";
 import {
   Box,
   Typography,
   ToggleButton,
   ToggleButtonGroup,
-  Button,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
@@ -17,123 +17,401 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-// ---------------- DATA DEFINITIONS ----------------
+// API Response Types
+interface ChartDataPoint {
+  name: string;
+  value: number;
+}
 
-// Daily data: 24 hours (AM/PM format)
-const dayData = [
-  { name: "12 AM", value: 3 },
-  { name: "1 AM", value: 2 },
-  { name: "2 AM", value: 2 },
-  { name: "3 AM", value: 1 },
-  { name: "4 AM", value: 1 },
-  { name: "5 AM", value: 1 },
-  { name: "6 AM", value: 2 },
-  { name: "7 AM", value: 3 },
-  { name: "8 AM", value: 4 },
-  { name: "9 AM", value: 6 },
-  { name: "10 AM", value: 8 },
-  { name: "11 AM", value: 7 },
-  { name: "12 PM", value: 9 },
-  { name: "1 PM", value: 6 },
-  { name: "2 PM", value: 5 },
-  { name: "3 PM", value: 6 },
-  { name: "4 PM", value: 8 },
-  { name: "5 PM", value: 7 },
-  { name: "6 PM", value: 5 },
-  { name: "7 PM", value: 5 },
-  { name: "8 PM", value: 4 },
-  { name: "9 PM", value: 3 },
-  { name: "10 PM", value: 3 },
-  { name: "11 PM", value: 2 },
-];
+interface Location {
+  name: string;
+  latitude: number;
+  longitude: number;
+  altitude: number;
+  timezone: string;
+}
 
-// Weekly data: 7 days
-const weekData = [
-  { name: "Mon", value: 15 },
-  { name: "Tue", value: 18 },
-  { name: "Wed", value: 25 },
-  { name: "Thu", value: 22 },
-  { name: "Fri", value: 30 },
-  { name: "Sat", value: 28 },
-  { name: "Sun", value: 20 },
-];
+interface PowerRating {
+  value: number;
+  unit: string;
+}
 
-// Yearly data: 12 months
-const yearData = [
-  { name: "Jan", value: 10 },
-  { name: "Feb", value: 12 },
-  { name: "Mar", value: 20 },
-  { name: "Apr", value: 15 },
-  { name: "May", value: 25 },
-  { name: "Jun", value: 30 },
-  { name: "Jul", value: 36 },
-  { name: "Aug", value: 40 },
-  { name: "Sep", value: 25 },
-  { name: "Oct", value: 42 },
-  { name: "Nov", value: 28 },
-  { name: "Dec", value: 35 },
-];
+interface StandbyPower {
+  value: number;
+  unit: string;
+}
 
-const consumptionDataSets = {
-  day: dayData,
-  week: weekData,
-  year: yearData,
-};
+interface Room {
+  roomId: string;
+  roomName: string;
+  roomType: string;
+}
 
-const productionDataSets = {
-  day: dayData.map((d) => ({ name: d.name, value: d.value * 0.8 })),
-  week: weekData.map((d) => ({ name: d.name, value: d.value * 0.9 })),
-  year: yearData.map((d) => ({ name: d.name, value: d.value * 0.85 })),
-};
+interface UsageTime {
+  start: string;
+  end: string;
+}
+
+interface UsagePattern {
+  frequency_unit: string;
+  frequency_value: number;
+  usage_times: UsageTime[];
+}
+
+interface Device {
+  deviceId: string;
+  deviceName: string;
+  powerRating: PowerRating;
+  usagePattern: UsagePattern;
+  energyType: string;
+  standbyPower: StandbyPower;
+  deviceCategory: string;
+  numberOfDevices: number;
+  room: Room;
+}
+
+interface SolarPanelData {
+  inverter_name: string;
+  module_name: string;
+  tilt: number;
+  orientation: number;
+  capacity: number;
+  efficiency: number;
+  installation_year: number;
+}
+
+interface ConsumptionRequestBody {
+  location: Location;
+  start_date: string;
+  devices: Device[];
+}
+
+interface ProductionRequestBody {
+  location: Location;
+  solar_panel_data: SolarPanelData;
+}
+
+interface HourlyResponse {
+  hourly_data: Array<{ hour: number; energy: number }>;
+  total_energy: number;
+}
+
+interface DailyResponse {
+  daily_data: Array<{ day: number; energy: number }>;
+  total_energy: number;
+}
+
+interface YearlyResponse {
+  monthly_data: Array<{ month: number; energy: number }>;
+  total_energy: number;
+}
+
+interface CategoryBreakdown {
+  [key: string]: number;
+}
+
+// Component Props & State
+type ModeType = "consumption" | "production";
+type TimeframeType = "day" | "week" | "year";
+
+interface DashboardState {
+  mode: ModeType;
+  timeframe: TimeframeType;
+  chartData: ChartDataPoint[];
+  totalKwh: number;
+  loading: boolean;
+  categoryBreakdown: CategoryBreakdown;
+}
 
 const DashboardPage: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const baseUrl = "https://your-api-endpoint.com"; // Replace with your actual API endpoint
 
-  // Mode toggle: consumption or production
-  const [mode, setMode] = useState<"consumption" | "production">("consumption");
-  // Timeframe toggle: day, week, or year
-  const [timeframe, setTimeframe] = useState<"day" | "week" | "year">("day");
+  // State with proper typing
+  const [state, setState] = useState<DashboardState>({
+    mode: "consumption",
+    timeframe: "day",
+    chartData: [],
+    totalKwh: 0,
+    loading: true,
+    categoryBreakdown: {},
+  });
 
-  // Determine which dataset to show
-  const currentData =
-    mode === "consumption"
-      ? consumptionDataSets[timeframe]
-      : productionDataSets[timeframe];
+  useEffect(() => {
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.mode, state.timeframe]);
 
-  // Example total kWh
-  const totalKwh =
-    mode === "consumption"
-      ? timeframe === "day"
-        ? 50
-        : timeframe === "week"
-        ? 300
-        : 1200
-      : timeframe === "day"
-      ? 40
-      : timeframe === "week"
-      ? 250
-      : 700;
+  const fetchData = async (): Promise<void> => {
+    setState(prevState => ({ ...prevState, loading: true }));
+    
+    try {
+      // Skip yearly consumption as it's not available
+      if (state.mode === "consumption" && state.timeframe === "year") {
+        setState(prevState => ({ ...prevState, timeframe: "day" }));
+        return;
+      }
+      
+      let endpoint = "";
+      let requestBody: ConsumptionRequestBody | ProductionRequestBody;
+      
+      // Determine endpoint based on mode and timeframe
+      if (state.mode === "consumption") {
+        endpoint = `/consumption/${state.timeframe === "day" ? "hourly" : "daily"}`;
+        
+        // Build consumption request body
+        requestBody = {
+          location: {
+            name: "Zagreb",
+            latitude: 45.815399,
+            longitude: 15.966568,
+            altitude: 122,
+            timezone: "Europe/Zagreb"
+          },
+          start_date: "2025-02-28", // Current date
+          devices: [
+            // Add your devices here based on the API schema
+            {
+              deviceId: "bulb1",
+              deviceName: "LED Bulb",
+              powerRating: {
+                value: 10,
+                unit: "W"
+              },
+              usagePattern: {
+                frequency_unit: "days",
+                frequency_value: 1,
+                usage_times: [
+                  {
+                    start: "2025-02-28T18:00:00+01:00",
+                    end: "2025-02-28T23:00:00+01:00"
+                  }
+                ]
+              },
+              energyType: "AC",
+              standbyPower: {
+                value: 0.5,
+                unit: "W"
+              },
+              deviceCategory: "lighting",
+              numberOfDevices: 3,
+              room: {
+                roomId: "livingRoom",
+                roomName: "Living Room",
+                roomType: "Living Room"
+              }
+            }
+          ]
+        } as ConsumptionRequestBody;
+      } else {
+        endpoint = `/production/${state.timeframe === "day" ? "hourly" : state.timeframe === "week" ? "daily" : "yearly"}`;
+        
+        // Build production request body
+        requestBody = {
+          location: {
+            name: "Zagreb",
+            latitude: 45.815399,
+            longitude: 15.966568,
+            altitude: 122,
+            timezone: "Europe/Zagreb"
+          },
+          solar_panel_data: {
+            inverter_name: "ABB__MICRO_0_3HV_I_OUTD_US_208__208V_",
+            module_name: "Advent_Solar_AS160___2006_",
+            tilt: 30.0,
+            orientation: 180.0,
+            capacity: 300,
+            efficiency: 21.5,
+            installation_year: 2022
+          }
+        } as ProductionRequestBody;
+      }
+      
+      // Make API request
+      const response = await axios.post(baseUrl + endpoint, requestBody);
+      
+      // Process the data based on timeframe
+      let processedData: { chartData: ChartDataPoint[]; totalKwh: number; categoryBreakdown?: CategoryBreakdown };
+      
+      if (state.timeframe === "day") {
+        processedData = processHourlyData(response.data as HourlyResponse);
+      } else if (state.timeframe === "week") {
+        processedData = processDailyData(response.data as DailyResponse);
+      } else {
+        processedData = processYearlyData(response.data as YearlyResponse);
+      }
+      
+      setState(prevState => ({
+        ...prevState,
+        chartData: processedData.chartData,
+        totalKwh: processedData.totalKwh,
+        categoryBreakdown: processedData.categoryBreakdown || prevState.categoryBreakdown,
+        loading: false
+      }));
+      
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      
+      // Fallback to sample data
+      const sampleData = getSampleData(state.mode, state.timeframe);
+      setState(prevState => ({
+        ...prevState,
+        chartData: sampleData.chartData,
+        totalKwh: sampleData.totalKwh,
+        categoryBreakdown: sampleData.categoryBreakdown || {},
+        loading: false
+      }));
+    }
+  };
+
+  // Process API response data
+  const processHourlyData = (data: HourlyResponse): { chartData: ChartDataPoint[]; totalKwh: number; categoryBreakdown?: CategoryBreakdown } => {
+    const chartData = data.hourly_data.map(item => ({
+      name: formatHour(item.hour),
+      value: item.energy
+    }));
+    
+    return {
+      chartData,
+      totalKwh: data.total_energy
+    };
+  };
+  
+  const processDailyData = (data: DailyResponse): { chartData: ChartDataPoint[]; totalKwh: number; categoryBreakdown?: CategoryBreakdown } => {
+    const chartData = data.daily_data.map(item => ({
+      name: formatDay(item.day),
+      value: item.energy
+    }));
+    
+    return {
+      chartData,
+      totalKwh: data.total_energy
+    };
+  };
+  
+  const processYearlyData = (data: YearlyResponse): { chartData: ChartDataPoint[]; totalKwh: number; categoryBreakdown?: CategoryBreakdown } => {
+    const chartData = data.monthly_data.map(item => ({
+      name: formatMonth(item.month),
+      value: item.energy
+    }));
+    
+    return {
+      chartData,
+      totalKwh: data.total_energy
+    };
+  };
+
+  // Format functions for time display
+  const formatHour = (hour: number): string => {
+    const h = hour % 12 || 12;
+    const ampm = hour < 12 ? "AM" : "PM";
+    return `${h} ${ampm}`;
+  };
+  
+  const formatDay = (day: number): string => {
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    return days[day % 7];
+  };
+  
+  const formatMonth = (month: number): string => {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return months[month - 1];
+  };
+
+  // Sample data fallback
+  const getSampleData = (mode: ModeType, timeframe: TimeframeType): { chartData: ChartDataPoint[]; totalKwh: number; categoryBreakdown: CategoryBreakdown } => {
+    // Daily data: 24 hours (AM/PM format)
+    const dayData: ChartDataPoint[] = [
+      { name: "12 AM", value: 3 },
+      { name: "1 AM", value: 2 },
+      { name: "2 AM", value: 2 },
+      // ... other hours
+      { name: "11 PM", value: 2 },
+    ];
+
+    // Weekly data: 7 days
+    const weekData: ChartDataPoint[] = [
+      { name: "Mon", value: 15 },
+      { name: "Tue", value: 18 },
+      { name: "Wed", value: 25 },
+      { name: "Thu", value: 22 },
+      { name: "Fri", value: 30 },
+      { name: "Sat", value: 28 },
+      { name: "Sun", value: 20 },
+    ];
+
+    // Yearly data: 12 months
+    const yearData: ChartDataPoint[] = [
+      { name: "Jan", value: 10 },
+      { name: "Feb", value: 12 },
+      // ... other months
+      { name: "Dec", value: 35 },
+    ];
+
+    const consumptionDataSets = {
+      day: dayData,
+      week: weekData,
+      year: yearData,
+    };
+
+    const productionDataSets = {
+      day: dayData.map((d) => ({ name: d.name, value: d.value * 0.8 })),
+      week: weekData.map((d) => ({ name: d.name, value: d.value * 0.9 })),
+      year: yearData.map((d) => ({ name: d.name, value: d.value * 0.85 })),
+    };
+
+    const consumptionBreakdown: CategoryBreakdown = {
+      lighting: 60,
+      appliances: 150,
+      hvac: 90,
+      electronics: 100
+    };
+
+    const productionBreakdown: CategoryBreakdown = {
+      solar: 250
+    };
+
+    return {
+      chartData: mode === "consumption" ? consumptionDataSets[timeframe] : productionDataSets[timeframe],
+      totalKwh: mode === "consumption" 
+        ? (timeframe === "day" ? 50 : timeframe === "week" ? 300 : 1200)
+        : (timeframe === "day" ? 40 : timeframe === "week" ? 250 : 700),
+      categoryBreakdown: mode === "consumption" ? consumptionBreakdown : productionBreakdown
+    };
+  };
 
   const handleModeChange = (
     event: React.MouseEvent<HTMLElement>,
-    newValue: "consumption" | "production" | null
-  ) => {
-    if (newValue) setMode(newValue);
+    newValue: ModeType | null
+  ): void => {
+    if (newValue) {
+      // If switching to consumption and timeframe is year, change to day
+      if (newValue === "consumption" && state.timeframe === "year") {
+        setState(prevState => ({ ...prevState, mode: newValue, timeframe: "day" }));
+      } else {
+        setState(prevState => ({ ...prevState, mode: newValue }));
+      }
+    }
   };
 
   const handleTimeframeChange = (
     event: React.MouseEvent<HTMLElement>,
-    newValue: "day" | "week" | "year" | null
-  ) => {
-    if (newValue) setTimeframe(newValue);
+    newValue: TimeframeType | null
+  ): void => {
+    if (newValue) {
+      // Prevent selecting year when in consumption mode
+      if (state.mode === "consumption" && newValue === "year") {
+        return;
+      }
+      setState(prevState => ({ ...prevState, timeframe: newValue }));
+    }
   };
 
   // Chart width based on data length
-  const chartWidth =
-    timeframe === "day"
-      ? currentData.length * 40 // 24 bars -> 960px
-      : currentData.length * 80; // e.g. 7 bars -> 560px, 12 bars -> 960px
+  const chartWidth = state.timeframe === "day" 
+    ? state.chartData.length * 40 
+    : state.chartData.length * 80;
 
   // Toggle button base styles
   const toggleBtnSx = {
@@ -240,7 +518,7 @@ const DashboardPage: React.FC = () => {
 
         {/* Consumption vs Production Toggle */}
         <ToggleButtonGroup
-          value={mode}
+          value={state.mode}
           exclusive
           onChange={handleModeChange}
           sx={{ ...modeToggleStyles, mb: 2 }}
@@ -254,21 +532,22 @@ const DashboardPage: React.FC = () => {
           fontWeight="bold"
           sx={{ mb: 2, fontFamily: "inherit" }}
         >
-          {mode === "consumption"
-            ? `Total Consumption: ${totalKwh} kWh`
-            : `Total Production: ${totalKwh} kWh`}
+          {state.mode === "consumption"
+            ? `Total Consumption: ${state.totalKwh} kWh`
+            : `Total Production: ${state.totalKwh} kWh`}
         </Typography>
 
         {/* Timeframe Toggle (D/W/Y) */}
         <ToggleButtonGroup
-          value={timeframe}
+          value={state.timeframe}
           exclusive
           onChange={handleTimeframeChange}
           sx={timeframeToggleStyles}
         >
           <ToggleButton value="day">D</ToggleButton>
           <ToggleButton value="week">W</ToggleButton>
-          <ToggleButton value="year">Y</ToggleButton>
+          {/* Only show Year option for Production */}
+          {state.mode === "production" && <ToggleButton value="year">Y</ToggleButton>}
         </ToggleButtonGroup>
       </Box>
 
@@ -287,48 +566,52 @@ const DashboardPage: React.FC = () => {
           (e.currentTarget as HTMLDivElement).scrollLeft += e.deltaY;
         }}
       >
-        <Box
-          sx={{
-            width: chartWidth,
-            height: 200,
-            display: "flex",
-            mx: chartWidth < 600 ? "auto" : 0, // center if narrower than container
-          }}
-        >
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={currentData} margin={{ top: 5, right: 15, left: 0, bottom: 5 }}>
-              <YAxis hide />
-              <XAxis
-                dataKey="name"
-                tickLine={false}
-                axisLine={false}
-                tick={{
-                  fontSize: 12,
-                  fill: "#666",
-                  fontFamily: "Roboto, sans-serif",
-                }}
-              />
-              <Tooltip
-                contentStyle={{
-                  borderRadius: "8px",
-                  border: "1px solid #ccc",
-                  fontFamily: "Roboto, sans-serif",
-                }}
-              />
-              <Bar
-                dataKey="value"
-                fill="#5A9FA3"
-                barSize={12}
-                radius={[4, 4, 0, 0]}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </Box>
+        {state.loading ? (
+          <Typography>Loading data...</Typography>
+        ) : (
+          <Box
+            sx={{
+              width: chartWidth,
+              height: 200,
+              display: "flex",
+              mx: chartWidth < 600 ? "auto" : 0, // center if narrower than container
+            }}
+          >
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={state.chartData} margin={{ top: 5, right: 15, left: 0, bottom: 5 }}>
+                <YAxis hide />
+                <XAxis
+                  dataKey="name"
+                  tickLine={false}
+                  axisLine={false}
+                  tick={{
+                    fontSize: 12,
+                    fill: "#666",
+                    fontFamily: "Roboto, sans-serif",
+                  }}
+                />
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: "8px",
+                    border: "1px solid #ccc",
+                    fontFamily: "Roboto, sans-serif",
+                  }}
+                />
+                <Bar
+                  dataKey="value"
+                  fill="#5A9FA3"
+                  barSize={12}
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </Box>
+        )}
       </Box>
 
       {/* Bottom Tiles */}
       <Box sx={{ textAlign: "left", mb: 4 }}>
-        {mode === "consumption" ? (
+        {state.mode === "consumption" ? (
           <Box
             sx={{
               display: "grid",
@@ -336,74 +619,26 @@ const DashboardPage: React.FC = () => {
               gap: "1rem",
             }}
           >
-            <Box
-              sx={{
-                p: 2,
-                backgroundColor: "#f8f8f8",
-                borderRadius: 2,
-                border: "1px solid #e0e0e0",
-                textAlign: "center",
-                fontFamily: "inherit",
-              }}
-            >
-              <Typography variant="body2" sx={{ color: "#888", mb: 1 }}>
-                Lighting
-              </Typography>
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                60 kWh
-              </Typography>
-            </Box>
-            <Box
-              sx={{
-                p: 2,
-                backgroundColor: "#f8f8f8",
-                borderRadius: 2,
-                border: "1px solid #e0e0e0",
-                textAlign: "center",
-                fontFamily: "inherit",
-              }}
-            >
-              <Typography variant="body2" sx={{ color: "#888", mb: 1 }}>
-                Appliances
-              </Typography>
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                150 kWh
-              </Typography>
-            </Box>
-            <Box
-              sx={{
-                p: 2,
-                backgroundColor: "#f8f8f8",
-                borderRadius: 2,
-                border: "1px solid #e0e0e0",
-                textAlign: "center",
-                fontFamily: "inherit",
-              }}
-            >
-              <Typography variant="body2" sx={{ color: "#888", mb: 1 }}>
-                HVAC
-              </Typography>
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                90 kWh
-              </Typography>
-            </Box>
-            <Box
-              sx={{
-                p: 2,
-                backgroundColor: "#f8f8f8",
-                borderRadius: 2,
-                border: "1px solid #e0e0e0",
-                textAlign: "center",
-                fontFamily: "inherit",
-              }}
-            >
-              <Typography variant="body2" sx={{ color: "#888", mb: 1 }}>
-                Electronics
-              </Typography>
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                100 kWh
-              </Typography>
-            </Box>
+            {Object.entries(state.categoryBreakdown).map(([category, value]) => (
+              <Box
+                key={category}
+                sx={{
+                  p: 2,
+                  backgroundColor: "#f8f8f8",
+                  borderRadius: 2,
+                  border: "1px solid #e0e0e0",
+                  textAlign: "center",
+                  fontFamily: "inherit",
+                }}
+              >
+                <Typography variant="body2" sx={{ color: "#888", mb: 1 }}>
+                  {category.charAt(0).toUpperCase() + category.slice(1)}
+                </Typography>
+                <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                  {value} kWh
+                </Typography>
+              </Box>
+            ))}
           </Box>
         ) : (
           <Box
@@ -421,7 +656,7 @@ const DashboardPage: React.FC = () => {
               Solar Panels
             </Typography>
             <Typography variant="h6" sx={{ fontWeight: 700 }}>
-              250 kWh
+              {state.categoryBreakdown.solar || 0} kWh
             </Typography>
           </Box>
         )}
@@ -431,3 +666,42 @@ const DashboardPage: React.FC = () => {
 };
 
 export default DashboardPage;
+// API Response Types
+interface HourlyDataPoint {
+  hour: number;
+  energy: number;
+}
+
+interface DailyDataPoint {
+  day: number;
+  energy: number;
+}
+
+interface MonthlyDataPoint {
+  month: number;
+  energy: number;
+}
+
+interface HourlyResponse {
+  hourly_data: HourlyDataPoint[];
+  total_energy: number;
+  category_breakdown?: {
+    [key: string]: number;
+  };
+}
+
+interface DailyResponse {
+  daily_data: DailyDataPoint[];
+  total_energy: number;
+  category_breakdown?: {
+    [key: string]: number;
+  };
+}
+
+interface YearlyResponse {
+  monthly_data: MonthlyDataPoint[];
+  total_energy: number;
+  category_breakdown?: {
+    [key: string]: number;
+  };
+}
