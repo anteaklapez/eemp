@@ -23,7 +23,8 @@ PROMPT_TEMPLATE = """Analyze these energy parameters and provide JSON recommenda
       "savings_predictions": ["specific metric 1", "specific metric 2 (optional)", "specific metric 3 (optional)"],
       "efficiency": {{
         "daily": 5.5,
-        "monthly": 15
+        "monthly": 15,
+        "yearly": 180
       }}
     }}
   ]
@@ -35,13 +36,13 @@ Solar: {panel_data}
 Weather: {weather_data}
 Devices: {devices}
 
-Return ONLY VALID JSON following the example format. Use numbers between 0-100 for daily and monthly efficiency percentages (no % symbol). Do not add explanations."""
+Return ONLY VALID JSON following the example format. Use numbers between 0-100 for daily and monthly efficiency percentages, and 0-1200 for yearly (no % symbol). The yearly value should represent the annualized efficiency gain. Do not add explanations."""
 
 
 class Efficiency(BaseModel):
     daily: float = Field(..., ge=0, le=100, description="Daily energy savings percentage")
     monthly: float = Field(..., ge=0, le=100, description="Monthly energy savings percentage")
-
+    yearly: float = Field(..., ge=0, le=1200, description="Yearly energy savings percentage")
 
 class SavingsPrediction(BaseModel):
     title: str = Field(..., max_length=40)
@@ -75,7 +76,7 @@ async def get_recommendations(request):
 
       # Extract JSON from response using regex
       raw_response = completion.choices[0].message.content
-      json_match = re.search(r'\{.*\}', raw_response, re.DOTALL)
+      json_match = re.search(r'(?s)\{.*\}', raw_response)
 
       if not json_match:
         await get_recommendations(request)
@@ -86,3 +87,136 @@ async def get_recommendations(request):
 
     except (json.JSONDecodeError, ValidationError) as e:
         return {"error": f"Invalid JSON response from API: {str(e)}"}
+
+
+from datetime import datetime, timedelta
+import calendar
+import pytz
+import random
+
+
+def calculate_efficiency_gains(recommendations_data, timezone="Europe/Berlin"):
+    """
+    Calculate efficiency gains for different time periods with realistic variations.
+
+    Args:
+        recommendations_data: A RecommendationResponse Pydantic model or dict
+        timezone: The timezone string of the user's location
+
+    Returns a dictionary with timestamped efficiency gains
+    """
+    # Get current date in the user's timezone
+    try:
+        tz = pytz.timezone(timezone)
+        current_date = datetime.now(tz)
+    except pytz.exceptions.UnknownTimeZoneError:
+        # Fallback to UTC if timezone is invalid
+        tz = pytz.UTC
+        current_date = datetime.now(tz)
+        print(f"Unknown timezone: {timezone}, falling back to UTC")
+
+    results = {
+        "weekly_by_day": {},
+        "monthly_by_day": {},
+        "yearly_by_month": {}
+    }
+
+    # Ensure we're working with the right data structure
+    if isinstance(recommendations_data, dict) and "recommendations" in recommendations_data:
+        recommendations = recommendations_data["recommendations"]
+    elif hasattr(recommendations_data, "recommendations"):
+        recommendations = recommendations_data.recommendations
+    else:
+        return {"error": "Invalid recommendations data structure"}
+
+    # Get base efficiency values
+    if isinstance(recommendations[0], dict):
+        base_daily = sum(rec["efficiency"]["daily"] for rec in recommendations)
+        base_monthly = sum(rec["efficiency"]["monthly"] for rec in recommendations)
+    else:
+        base_daily = sum(rec.efficiency.daily for rec in recommendations)
+        base_monthly = sum(rec.efficiency.monthly for rec in recommendations)
+
+    # Define weekday patterns (e.g., weekends might have different usage patterns)
+    weekday_factors = {
+        0: 1.1,  # Monday
+        1: 1.0,  # Tuesday
+        2: 1.0,  # Wednesday
+        3: 1.0,  # Thursday
+        4: 1.1,  # Friday
+        5: 0.9,  # Saturday
+        6: 0.8,  # Sunday
+    }
+
+    # Define seasonal factors for months
+    seasonal_factors = {
+        1: 0.8,  # January
+        2: 0.85,  # February
+        3: 0.9,  # March
+        4: 1.0,  # April
+        5: 1.1,  # May
+        6: 1.2,  # June
+        7: 1.2,  # July
+        8: 1.15,  # August
+        9: 1.05,  # September
+        10: 0.95,  # October
+        11: 0.85,  # November
+        12: 0.8,  # December
+    }
+
+    # Calculate weekly gains (7 days) with daily variations
+    for day in range(7):
+        # Calculate date for this day
+        day_date = current_date + timedelta(days=day)
+        # Format timestamp in ISO 8601 with the correct timezone offset
+        timestamp = day_date.strftime("%Y-%m-%dT12:00:00%z")
+        # Insert colon in timezone offset (e.g., +0100 -> +01:00) for ISO 8601 compliance
+        timestamp = f"{timestamp[:-2]}:{timestamp[-2:]}"
+
+        # Apply weekday factor and small random variation
+        weekday = day_date.weekday()
+        daily_factor = weekday_factors.get(weekday, 1.0)
+        random_factor = 1.0 + random.uniform(-0.05, 0.05)  # ±5% random variation
+
+        daily_total = base_daily * daily_factor * random_factor
+        results["weekly"][timestamp] = round(daily_total, 1)
+
+    # Calculate monthly gains (30 days) with daily variations and cumulative effect
+    cumulative_factor = 1.0
+    for day in range(30):
+        # Calculate date for this day
+        day_date = current_date + timedelta(days=day)
+        # Format timestamp in ISO 8601 with the correct timezone offset
+        timestamp = day_date.strftime("%Y-%m-%dT12:00:00%z")
+        # Insert colon in timezone offset (e.g., +0100 -> +01:00) for ISO 8601 compliance
+        timestamp = f"{timestamp[:-2]}:{timestamp[-2:]}"
+
+        # Apply weekday factor, small random variation, and small cumulative improvement
+        weekday = day_date.weekday()
+        daily_factor = weekday_factors.get(weekday, 1.0)
+        random_factor = 1.0 + random.uniform(-0.05, 0.05)  # ±5% random variation
+
+        # Small cumulative improvement over time (0.5% per day)
+        cumulative_factor += 0.005
+
+        daily_total = base_daily * daily_factor * random_factor * cumulative_factor
+        results["monthly"][timestamp] = round(daily_total, 1)
+
+    # Calculate yearly gains (12 months) with seasonal variations
+    for month_offset in range(12):
+        # Calculate target month
+        target_month = (current_date.month + month_offset) % 12
+        if target_month == 0:
+            target_month = 12
+
+        # Get month name
+        month_name = calendar.month_name[target_month]
+
+        # Apply seasonal factor and small random variation
+        seasonal_factor = seasonal_factors.get(target_month, 1.0)
+        random_factor = 1.0 + random.uniform(-0.03, 0.03)  # ±3% random variation
+
+        monthly_total = base_monthly * seasonal_factor * random_factor
+        results["yearly"][month_name] = round(monthly_total, 1)
+
+    return results

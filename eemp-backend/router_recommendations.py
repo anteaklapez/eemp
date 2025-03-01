@@ -1,7 +1,7 @@
 from typing import List
 
 from fastapi import APIRouter
-from deepseek_service import get_recommendations
+from deepseek_service import get_recommendations, calculate_efficiency_gains, RecommendationResponse
 from solar_models import PromptRequest, WeatherDataFull
 from redis_service import get_daily_weather_data
 
@@ -27,8 +27,18 @@ def parse_weather_data(raw_weather: dict) -> List[WeatherDataFull]:
         ))
     return parsed
 
+
 @router.post('/recommendations')
 async def recommendations(request: PromptRequest):
     weather = get_daily_weather_data(request.location)
     request.weather_data = parse_weather_data(weather)
-    return await get_recommendations(request)
+    recommendations_data = await get_recommendations(request)
+
+    # Calculate efficiency gains
+    efficiency_gains = calculate_efficiency_gains(recommendations_data, request.location.timezone)
+
+    # Return both the recommendations and efficiency gains
+    return {
+        "recommendations": recommendations_data.recommendations,
+        "efficiency_gains": efficiency_gains
+    }
