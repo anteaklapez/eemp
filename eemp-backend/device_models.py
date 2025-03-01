@@ -22,13 +22,11 @@ class UsageTime(BaseModel):
 
 
 class UsagePattern(BaseModel):
-    frequency_unit: str
-    frequency_value: int
     usage_times: List[UsageTime]
 
     def __str__(self):
         times = ", ".join(str(t) for t in self.usage_times)
-        return f"Used {self.frequency_value} times {self.frequency_unit} at {times}"
+        return f"Used at {times}"
 
 
 class StandbyPower(BaseModel):
