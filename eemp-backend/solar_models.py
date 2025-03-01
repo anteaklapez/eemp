@@ -20,6 +20,21 @@ class CustomSolarModule(BaseModel):
     n_s: float      # Number of cells in the module
     t_noct: float   # Nominal operating cell temperature (°C)
 
+    def __hash__(self):
+        return hash((
+            self.name,
+            self.pdc0,
+            self.gamma_pdc,
+            self.bvoco,
+            self.bvmpo,
+            self.impo,
+            self.vmpo,
+            self.pmpo,
+            self.a_c,
+            self.n_s,
+            self.t_noct
+        ))
+
 class CustomInverter(BaseModel):
     name: str
     pdc0: float
@@ -32,11 +47,33 @@ class CustomInverter(BaseModel):
     c2: float
     c3: float
 
+    def __hash__(self):
+        return hash((
+            self.name,
+            self.pdc0,
+            self.paco,
+            self.pdco,
+            self.vdco,
+            self.pso,
+            self.c0,
+            self.c1,
+            self.c2,
+            self.c3
+        ))
+
 class CustomTempModelParams(BaseModel):
     u_c: float
     u_v: float
     eta_m: float
     alpha_absorption: float
+
+    def __hash__(self):
+        return hash((
+            self.u_c,
+            self.u_v,
+            self.eta_m,
+            self.alpha_absorption
+        ))
 
 class WeatherData(BaseModel):
     datetime: datetime
@@ -45,6 +82,16 @@ class WeatherData(BaseModel):
     ghi: float
     dhi: float
     dni: float
+
+    def __hash__(self):
+        return hash((
+            self.datetime,
+            self.temperature,
+            self.wind_speed,
+            self.ghi,
+            self.dhi,
+            self.dni
+        ))
 
 class SolarPanelData(BaseModel):
     inverter_name: str | None = None
