@@ -3,6 +3,8 @@ from solar_models import EnergyCalculationRequest
 from solar_calc_service import calculate_energy_with_tmy, calculate_radiation, calculate_energy
 from redis_service import get_daily_weather_data, get_hourly_weather_data
 from openweatherapi_service import parse_daily_response, parse_hourly_response
+import json
+from fastapi.encoders import jsonable_encoder
 
 router = APIRouter()
 
@@ -13,6 +15,11 @@ async def calculate_energy_tmy(request: Request, energy_request: EnergyCalculati
     Uses caching to avoid redundant calculations.
     """
     solar_panel_data = energy_request.solar_panel_data
+    # Convert Pydantic model to JSON-compatible dict
+    json_compatible_data = jsonable_encoder(energy_request)
+
+    # Pretty print with indentation
+    print(json.dumps(json_compatible_data, indent=4))
     location = energy_request.location
 
     energy_output = await calculate_energy_with_tmy(request, solar_panel_data, location)
