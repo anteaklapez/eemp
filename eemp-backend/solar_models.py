@@ -145,10 +145,10 @@ class WeatherDataFull(BaseModel):
 
 
 class PromptRequest(BaseModel):
-    solar_panel_data: Optional[SolarPanelData] = None
-    devices: Optional[List[Device]] = None
+    solar_panel_data: Optional[SolarPanelData] | None = None
+    devices: Optional[List[Device]] | None = None
     location: LocationData
-    weather_data: Optional[List[WeatherDataFull]] = None
+    weather_data: Optional[List[WeatherDataFull]] | None = None
 
     def __str__(self):
         # Format weather data if present
