@@ -1,7 +1,8 @@
 from typing import List
 
 from fastapi import APIRouter
-from deepseek_service import get_recommendations, calculate_efficiency_gains, RecommendationResponse
+from deepseek_service import get_recommendations, calculate_efficiency_gains, RecommendationResponse, \
+    calculate_current_efficiency
 from solar_models import PromptRequest, WeatherDataFull
 from redis_service import get_daily_weather_data
 
@@ -37,8 +38,14 @@ async def recommendations(request: PromptRequest):
     # Calculate efficiency gains
     efficiency_gains = calculate_efficiency_gains(recommendations_data, request.location.timezone)
 
-    # Return both the recommendations and efficiency gains
+    # Calculate current efficiency
+    current_efficiency = calculate_current_efficiency(request.solar_panel_data, request.devices,
+                                                      request.location.timezone)
+
+
+    # Return recommendations, efficiency gains, and current efficiency
     return {
         "recommendations": recommendations_data.recommendations,
-        "efficiency_gains": efficiency_gains
+        "efficiency_gains": efficiency_gains,
+        "current_efficiency": current_efficiency
     }
