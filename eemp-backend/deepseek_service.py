@@ -62,9 +62,9 @@ class RecommendationResponse(BaseModel):
 async def get_recommendations(request):
     try:
       prompt = PROMPT_TEMPLATE.format(
-        panel_data=str(request.solar_panel_data),
-        weather_data="\n\n".join(str(w) for w in request.weather_data),
-        devices="\n".join(str(d) for d in request.devices),
+        panel_data=str(request.solar_panel_data) if request.solar_panel_data else "No solar panel data available",
+        weather_data="\n\n".join(str(w) for w in request.weather_data) if request.weather_data else "No weather data available",
+        devices="\n".join(str(d) for d in request.devices) if request.devices else "No devices available",
         location=str(request.location)
       )
       completion = client.chat.completions.create(
@@ -96,7 +96,7 @@ async def get_recommendations(request):
 
 
 
-def calculate_efficiency_gains(recommendations_data, timezone="Europe/Berlin"):
+def calculate_efficiency_gains(recommendations_data, timezone):
     """
     Calculate efficiency gains for different time periods with realistic variations.
 
@@ -223,7 +223,7 @@ def calculate_efficiency_gains(recommendations_data, timezone="Europe/Berlin"):
     return results
 
 
-def calculate_current_efficiency(solar_panel_data, devices, timezone="Europe/Berlin"):
+def calculate_current_efficiency(solar_panel_data, devices, timezone):
     """
     Calculate current efficiency metrics with proper formatting.
 
