@@ -1,10 +1,14 @@
-from typing import List, Dict
+from typing import List
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
 import json
 import re
 from pydantic import BaseModel, Field, ValidationError
+from datetime import datetime, timedelta
+import calendar
+import pytz
+import random
 
 load_dotenv()
 api_key = os.getenv("OPENROUTER_API_KEY")
@@ -89,10 +93,7 @@ async def get_recommendations(request):
         return {"error": f"Invalid JSON response from API: {str(e)}"}
 
 
-from datetime import datetime, timedelta
-import calendar
-import pytz
-import random
+
 
 
 def calculate_efficiency_gains(recommendations_data, timezone="Europe/Berlin"):
@@ -116,9 +117,9 @@ def calculate_efficiency_gains(recommendations_data, timezone="Europe/Berlin"):
         print(f"Unknown timezone: {timezone}, falling back to UTC")
 
     results = {
-        "weekly_by_day": {},
-        "monthly_by_day": {},
-        "yearly_by_month": {}
+        "weekly": {},
+        "monthly": {},
+        "yearly": {}
     }
 
     # Ensure we're working with the right data structure
@@ -218,5 +219,136 @@ def calculate_efficiency_gains(recommendations_data, timezone="Europe/Berlin"):
 
         monthly_total = base_monthly * seasonal_factor * random_factor
         results["yearly"][month_name] = round(monthly_total, 1)
+
+    return results
+
+
+def calculate_current_efficiency(solar_panel_data, devices, timezone="Europe/Berlin"):
+    """
+    Calculate current efficiency metrics with proper formatting.
+
+    Args:
+        solar_panel_data: Solar panel data
+        devices: List of devices with usage patterns
+        timezone: The timezone string of the user's location
+
+    Returns a dictionary with current efficiency metrics formatted like predicted efficiency
+    """
+    # Get current date in the user's timezone
+    try:
+        tz = pytz.timezone(timezone)
+        current_date = datetime.now(tz)
+    except pytz.exceptions.UnknownTimeZoneError:
+        # Fallback to UTC if timezone is invalid
+        tz = pytz.UTC
+        current_date = datetime.now(tz)
+        print(f"Unknown timezone: {timezone}, falling back to UTC")
+
+    # Calculate base efficiency values
+    panel_capacity_kw = solar_panel_data.capacity / 1000  # Convert W to kW
+    panel_efficiency = solar_panel_data.efficiency / 100  # Convert % to decimal
+    avg_sunlight_hours = 4.5  # Assume average sunlight hours per day for Belgium
+    solar_daily_production = panel_capacity_kw * panel_efficiency * avg_sunlight_hours
+
+    # Device current energy consumption (kWh/day)
+    total_device_consumption = 0
+    for device in devices:
+        print(device.powerRating.value)
+        if device.powerRating.unit=='kW':
+            power_rating_kw = device.powerRating.value            # Convert W to kW
+        else:
+            power_rating_kw = device.powerRating.value / 1000
+        if device.standbyPower.unit == 'kW':
+            standby_power_kw = device.standbyPower.value            # Convert W to kW
+        else:
+            standby_power_kw = device.standbyPower.value / 1000
+
+        number_of_devices = device.numberOfDevices
+
+        # Calculate daily usage time in hours
+        daily_usage_hours = 0
+        for usage in device.usagePattern.usage_times:
+            start_time = datetime.fromisoformat(usage.start)
+            end_time = datetime.fromisoformat(usage.end)
+            usage_duration = (end_time - start_time).total_seconds() / 3600  # Convert seconds to hours
+            daily_usage_hours += usage_duration
+
+        # Average daily usage (divide by 7 days)
+        avg_daily_usage = daily_usage_hours / 7
+
+        # Calculate daily consumption for the device
+        daily_consumption = (power_rating_kw * avg_daily_usage + standby_power_kw * 24) * number_of_devices
+        total_device_consumption += daily_consumption
+
+    # Calculate efficiency as percentage of consumption covered by solar
+    if total_device_consumption > 0:
+        efficiency_percentage = (solar_daily_production / total_device_consumption) * 100
+        # Cap efficiency at 100%
+        efficiency_percentage = min(efficiency_percentage, 100)
+    else:
+        efficiency_percentage = 100  # If no consumption, we're 100% efficient
+
+    # Calculate net energy balance
+    net_energy = solar_daily_production - total_device_consumption
+
+    # Format the results in the same structure as predicted efficiency
+    results = {
+        "weekly": {},
+        "monthly": {},
+        "yearly": {}
+    }
+
+    # Define seasonal factors for months (solar production varies by season)
+    seasonal_factors = {
+        1: 0.7,  # January
+        2: 0.8,  # February
+        3: 0.9,  # March
+        4: 1.0,  # April
+        5: 1.1,  # May
+        6: 1.2,  # June
+        7: 1.2,  # July
+        8: 1.1,  # August
+        9: 1.0,  # September
+        10: 0.9,  # October
+        11: 0.8,  # November
+        12: 0.7,  # December
+    }
+
+    # Fill in weekly data
+    for day in range(7):
+        day_date = current_date + timedelta(days=day)
+        timestamp = day_date.strftime("%Y-%m-%dT12:00:00%z")
+        timestamp = f"{timestamp[:-2]}:{timestamp[-2:]}"
+
+        # Apply small daily variation
+        daily_factor = 1.0 + ((day % 7) - 3) * 0.02  # Small variation based on day of week
+        daily_efficiency = efficiency_percentage * daily_factor
+
+        results["weekly"][timestamp] = round(daily_efficiency, 1)
+
+    # Fill in monthly data
+    for day in range(30):
+        day_date = current_date + timedelta(days=day)
+        timestamp = day_date.strftime("%Y-%m-%dT12:00:00%z")
+        timestamp = f"{timestamp[:-2]}:{timestamp[-2:]}"
+
+        # Apply small daily variation
+        daily_factor = 1.0 + ((day % 7) - 3) * 0.02  # Small variation based on day of week
+        daily_efficiency = efficiency_percentage * daily_factor
+
+        results["monthly"][timestamp] = round(daily_efficiency, 1)
+
+    # Fill in yearly data
+    for month_offset in range(12):
+        target_month = (current_date.month + month_offset) % 12
+        if target_month == 0:
+            target_month = 12
+        month_name = calendar.month_name[target_month]
+
+        # Apply seasonal factor for month
+        seasonal_factor = seasonal_factors.get(target_month, 1.0)
+        monthly_efficiency = efficiency_percentage * seasonal_factor
+
+        results["yearly"][month_name] = round(monthly_efficiency, 1)
 
     return results
