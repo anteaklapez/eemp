@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from "react";
-import axios from "axios";
+import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -7,7 +6,8 @@ import {
   ToggleButtonGroup,
   useMediaQuery,
   useTheme,
-} from "@mui/material";
+  CircularProgress,
+} from '@mui/material';
 import {
   BarChart,
   Bar,
@@ -15,36 +15,12 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
-} from "recharts";
+} from 'recharts';
 
-// API Response Types
-interface ChartDataPoint {
-  name: string;
-  value: number;
-}
-
-interface Location {
-  name: string;
-  latitude: number;
-  longitude: number;
-  altitude: number;
-  timezone: string;
-}
-
+// Device interfaces
 interface PowerRating {
   value: number;
   unit: string;
-}
-
-interface StandbyPower {
-  value: number;
-  unit: string;
-}
-
-interface Room {
-  roomId: string;
-  roomName: string;
-  roomType: string;
 }
 
 interface UsageTime {
@@ -53,9 +29,13 @@ interface UsageTime {
 }
 
 interface UsagePattern {
-  frequency_unit: string;
-  frequency_value: number;
   usage_times: UsageTime[];
+}
+
+interface Room {
+  roomId: string;
+  roomName: string;
+  roomType: string;
 }
 
 interface Device {
@@ -64,461 +44,474 @@ interface Device {
   powerRating: PowerRating;
   usagePattern: UsagePattern;
   energyType: string;
-  standbyPower: StandbyPower;
+  standbyPower: PowerRating;
   deviceCategory: string;
-  numberOfDevices: number;
+  quantity?: number;
   room: Room;
+  lastUpdated?: string;
 }
 
-interface SolarPanelData {
-  inverter_name: string;
-  module_name: string;
-  tilt: number;
-  orientation: number;
-  capacity: number;
-  efficiency: number;
-  installation_year: number;
+// Location interface
+interface UserLocation {
+  name: string;
+  latitude: number;
+  longitude: number;
+  altitude: number;
+  timezone: string;
 }
 
-interface ConsumptionRequestBody {
-  location: Location;
-  start_date: string;
-  devices: Device[];
+// Chart data interface
+interface ChartDataPoint {
+  name: string;
+  value: number;
 }
 
-interface ProductionRequestBody {
-  location: Location;
-  solar_panel_data: SolarPanelData;
+// Data interfaces
+interface ConsumptionData {
+  day: ChartDataPoint[];
+  week: ChartDataPoint[];
 }
 
-interface HourlyResponse {
-  hourly_data: Array<{ hour: number; energy: number }>;
-  total_energy: number;
+interface ProductionData extends ConsumptionData {
+  year: ChartDataPoint[];
 }
 
-interface DailyResponse {
-  daily_data: Array<{ day: number; energy: number }>;
-  total_energy: number;
+interface CategoryConsumption {
+  [category: string]: number;
 }
 
-interface YearlyResponse {
-  monthly_data: Array<{ month: number; energy: number }>;
-  total_energy: number;
-}
-
-interface CategoryBreakdown {
-  [key: string]: number;
-}
-
-// Component Props & State
-type ModeType = "consumption" | "production";
-type TimeframeType = "day" | "week" | "year";
-
-interface DashboardState {
-  mode: ModeType;
-  timeframe: TimeframeType;
-  chartData: ChartDataPoint[];
-  totalKwh: number;
-  loading: boolean;
-  categoryBreakdown: CategoryBreakdown;
-}
-
-const DashboardPage: React.FC = () => {
+const DashboardPage = () => {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const baseUrl = "https://your-api-endpoint.com"; // Replace with your actual API endpoint
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-  // State with proper typing
-  const [state, setState] = useState<DashboardState>({
-    mode: "consumption",
-    timeframe: "day",
-    chartData: [],
-    totalKwh: 0,
-    loading: true,
-    categoryBreakdown: {},
+  // State variables
+  const [mode, setMode] = useState('consumption');
+  const [timeframe, setTimeframe] = useState('day');
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
+  const [consumptionData, setConsumptionData] = useState<ConsumptionData>({
+    day: [],
+    week: [],
   });
+  const [productionData, setProductionData] = useState<ProductionData>({
+    day: [],
+    week: [],
+    year: [],
+  });
+  const [categoryConsumption, setCategoryConsumption] =
+    useState<CategoryConsumption>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [totalConsumption, setTotalConsumption] = useState<number>(0);
+  const [totalProduction, setTotalProduction] = useState<number>(0);
 
   useEffect(() => {
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.mode, state.timeframe]);
-
-  const fetchData = async (): Promise<void> => {
-    setState(prevState => ({ ...prevState, loading: true }));
-    
-    try {
-      // Skip yearly consumption as it's not available
-      if (state.mode === "consumption" && state.timeframe === "year") {
-        setState(prevState => ({ ...prevState, timeframe: "day" }));
-        return;
+    // Load data from localStorage
+    const loadFromLocalStorage = (key, defaultValue) => {
+      try {
+        const storedData = localStorage.getItem(key);
+        if (storedData) {
+          return JSON.parse(storedData);
+        }
+        return defaultValue;
+      } catch (err) {
+        console.error(`Error loading ${key} from localStorage:`, err);
+        return defaultValue;
       }
-      
-      let endpoint = "";
-      let requestBody: ConsumptionRequestBody | ProductionRequestBody;
-      
-      // Determine endpoint based on mode and timeframe
-      if (state.mode === "consumption") {
-        endpoint = `/consumption/${state.timeframe === "day" ? "hourly" : "daily"}`;
-        
-        // Build consumption request body
-        requestBody = {
-          location: {
-            name: "Zagreb",
-            latitude: 45.815399,
-            longitude: 15.966568,
-            altitude: 122,
-            timezone: "Europe/Zagreb"
-          },
-          start_date: "2025-02-28", // Current date
-          devices: [
-            // Add your devices here based on the API schema
-            {
-              deviceId: "bulb1",
-              deviceName: "LED Bulb",
-              powerRating: {
-                value: 10,
-                unit: "W"
-              },
-              usagePattern: {
-                frequency_unit: "days",
-                frequency_value: 1,
-                usage_times: [
-                  {
-                    start: "2025-02-28T18:00:00+01:00",
-                    end: "2025-02-28T23:00:00+01:00"
-                  }
-                ]
-              },
-              energyType: "AC",
-              standbyPower: {
-                value: 0.5,
-                unit: "W"
-              },
-              deviceCategory: "lighting",
-              numberOfDevices: 3,
-              room: {
-                roomId: "livingRoom",
-                roomName: "Living Room",
-                roomType: "Living Room"
-              }
+    };
+
+    const loadInitialData = () => {
+      setLoading(true);
+      try {
+        // Load devices, user location, and energy data from localStorage
+        const devicesData = loadFromLocalStorage('devices', []);
+        const locationData = loadFromLocalStorage('userLocation', null);
+        const energyData = loadFromLocalStorage('energyData', null);
+
+        setDevices(devicesData);
+        setUserLocation(locationData);
+
+        // Process energy data if available
+        if (energyData) {
+          // Process consumption data
+          if (energyData.consumption) {
+            if (energyData.consumption.hourly) {
+              const hourlyData = processHourlyConsumptionData(
+                energyData.consumption.hourly
+              );
+              setConsumptionData((prev) => ({ ...prev, day: hourlyData }));
             }
-          ]
-        } as ConsumptionRequestBody;
-      } else {
-        endpoint = `/production/${state.timeframe === "day" ? "hourly" : state.timeframe === "week" ? "daily" : "yearly"}`;
-        
-        // Build production request body
-        requestBody = {
-          location: {
-            name: "Zagreb",
-            latitude: 45.815399,
-            longitude: 15.966568,
-            altitude: 122,
-            timezone: "Europe/Zagreb"
-          },
-          solar_panel_data: {
-            inverter_name: "ABB__MICRO_0_3HV_I_OUTD_US_208__208V_",
-            module_name: "Advent_Solar_AS160___2006_",
-            tilt: 30.0,
-            orientation: 180.0,
-            capacity: 300,
-            efficiency: 21.5,
-            installation_year: 2022
+
+            if (energyData.consumption.daily) {
+              const dailyData = processDailyConsumptionData(
+                energyData.consumption.daily
+              );
+              setConsumptionData((prev) => ({ ...prev, week: dailyData }));
+
+              // Calculate total consumption
+              const totalConsumption = calculateTotalConsumption(
+                energyData.consumption.daily
+              );
+              setTotalConsumption(totalConsumption);
+            }
           }
-        } as ProductionRequestBody;
+
+          // Process production data
+          if (energyData.production) {
+            if (energyData.production.hourly) {
+              const hourlyData = processHourlyProductionData(
+                energyData.production.hourly
+              );
+              setProductionData((prev) => ({ ...prev, day: hourlyData }));
+            }
+
+            if (energyData.production.daily) {
+              const dailyData = processDailyProductionData(
+                energyData.production.daily
+              );
+              setProductionData((prev) => ({ ...prev, week: dailyData }));
+            }
+
+            if (energyData.production.yearly) {
+              const yearlyData = processYearlyProductionData(
+                energyData.production.yearly
+              );
+              setProductionData((prev) => ({ ...prev, year: yearlyData }));
+            }
+
+            // Calculate total production
+            if (energyData.production.daily) {
+              const totalProduction = calculateTotalProduction(
+                energyData.production.daily
+              );
+              setTotalProduction(totalProduction);
+            }
+          }
+
+          // Calculate consumption by category
+          if (devicesData.length > 0) {
+            const categories = calculateCategoryConsumption(devicesData);
+            setCategoryConsumption(categories);
+          }
+        }
+      } catch (err) {
+        console.error('Error loading data from localStorage:', err);
+        setError('Failed to load energy data. Please try again later.');
+      } finally {
+        setLoading(false);
       }
-      
-      // Make API request
-      const response = await axios.post(baseUrl + endpoint, requestBody);
-      
-      // Process the data based on timeframe
-      let processedData: { chartData: ChartDataPoint[]; totalKwh: number; categoryBreakdown?: CategoryBreakdown };
-      
-      if (state.timeframe === "day") {
-        processedData = processHourlyData(response.data as HourlyResponse);
-      } else if (state.timeframe === "week") {
-        processedData = processDailyData(response.data as DailyResponse);
+    };
+
+    loadInitialData();
+  }, []);
+
+  // Process hourly consumption data
+  const processHourlyConsumptionData = (hourlyData) => {
+    if (!hourlyData || !hourlyData.energy_output) return [];
+
+    return Object.entries(hourlyData.energy_output).map(
+      ([timestamp, energy]) => ({
+        name: new Date(timestamp).toLocaleTimeString([], {
+          hour: '2-digit',
+          hour12: true,
+        }),
+        value: parseFloat(Number(energy).toFixed(2)),
+      })
+    );
+  };
+
+  // Process daily consumption data
+  const processDailyConsumptionData = (dailyData) => {
+    if (!dailyData || !dailyData.energy_output) return [];
+
+    return Object.entries(dailyData.energy_output).map(
+      ([timestamp, energy]) => ({
+        name: new Date(timestamp).toLocaleDateString([], { weekday: 'short' }),
+        value: parseFloat(Number(energy).toFixed(2)),
+      })
+    );
+  };
+
+  // Process hourly production data
+  const processHourlyProductionData = (hourlyData) => {
+    if (!hourlyData || !hourlyData.energy_output) return [];
+
+    return Object.entries(hourlyData.energy_output).map(
+      ([timestamp, energy]) => ({
+        name: new Date(timestamp).toLocaleTimeString([], {
+          hour: '2-digit',
+          hour12: true,
+        }),
+        value: parseFloat(Number(energy).toFixed(2)),
+      })
+    );
+  };
+
+  // Process daily production data
+  const processDailyProductionData = (dailyData) => {
+    if (!dailyData || !dailyData.energy_output) return [];
+
+    return Object.entries(dailyData.energy_output).map(
+      ([timestamp, energy]) => ({
+        name: new Date(timestamp).toLocaleDateString([], { weekday: 'short' }),
+        value: parseFloat(Number(energy).toFixed(2)),
+      })
+    );
+  };
+
+  // Process yearly production data
+  const processYearlyProductionData = (yearlyData) => {
+    if (!yearlyData || !yearlyData.energy_output) return [];
+
+    return Object.entries(yearlyData.energy_output).map(([month, energy]) => ({
+      name: new Date(month + '-01').toLocaleDateString([], { month: 'short' }),
+      value: parseFloat(Number(energy).toFixed(2)),
+    }));
+  };
+
+  // Calculate total consumption
+  const calculateTotalConsumption = (dailyData) => {
+    if (!dailyData || !dailyData.daily_consumption) return 0;
+
+    const total = dailyData.daily_consumption.reduce(
+      (sum, item) => sum + item.consumption,
+      0
+    );
+    return parseFloat(total.toFixed(2));
+  };
+
+  // Calculate total production
+  const calculateTotalProduction = (dailyData) => {
+    if (!dailyData || !dailyData.energy_output) return 0;
+
+    const total: any = Object.values(dailyData.energy_output).reduce(
+      (sum: number, value: any) => sum + Number(value),
+      0
+    );
+    return parseFloat(total.toFixed(2));
+  };
+
+  // Calculate consumption by category
+  const calculateCategoryConsumption = (devices) => {
+    const categoryConsumption = {};
+
+    devices.forEach((device) => {
+      let category, powerW, quantity, usageTimes;
+
+      if (device.category === 'Solar Panel') {
+        // Handle solar panel (production)
+        category = 'Solar Panel';
+        powerW = parseFloat(device.powerRatingValue) || 0;
+        quantity = device.quantity || 1;
+        usageTimes = device.usageTimes;
       } else {
-        processedData = processYearlyData(response.data as YearlyResponse);
+        // Handle consumption devices
+        category = device.deviceCategory || 'Other';
+        powerW = device.powerRating?.value || 0;
+        quantity = device.quantity || 1;
+        usageTimes = device.usagePattern?.usage_times || [];
       }
-      
-      setState(prevState => ({
-        ...prevState,
-        chartData: processedData.chartData,
-        totalKwh: processedData.totalKwh,
-        categoryBreakdown: processedData.categoryBreakdown || prevState.categoryBreakdown,
-        loading: false
-      }));
-      
-    } catch (error) {
-      console.error("Error fetching data:", error);
-      
-      // Fallback to sample data
-      const sampleData = getSampleData(state.mode, state.timeframe);
-      setState(prevState => ({
-        ...prevState,
-        chartData: sampleData.chartData,
-        totalKwh: sampleData.totalKwh,
-        categoryBreakdown: sampleData.categoryBreakdown || {},
-        loading: false
-      }));
-    }
+
+      if (!categoryConsumption[category]) {
+        categoryConsumption[category] = 0;
+      }
+
+      const dailyUsageHours = usageTimes.reduce((total, time) => {
+        const start = new Date(time.start);
+        const end = new Date(time.end);
+        return total + (Number(end) - Number(start)) / (1000 * 60 * 60);
+      }, 0);
+
+      const dailyConsumption = (powerW * quantity * dailyUsageHours) / 1000; // Convert to kWh
+      categoryConsumption[category] += dailyConsumption;
+    });
+
+    return categoryConsumption;
   };
 
-  // Process API response data
-  const processHourlyData = (data: HourlyResponse): { chartData: ChartDataPoint[]; totalKwh: number; categoryBreakdown?: CategoryBreakdown } => {
-    const chartData = data.hourly_data.map(item => ({
-      name: formatHour(item.hour),
-      value: item.energy
-    }));
-    
-    return {
-      chartData,
-      totalKwh: data.total_energy
-    };
-  };
-  
-  const processDailyData = (data: DailyResponse): { chartData: ChartDataPoint[]; totalKwh: number; categoryBreakdown?: CategoryBreakdown } => {
-    const chartData = data.daily_data.map(item => ({
-      name: formatDay(item.day),
-      value: item.energy
-    }));
-    
-    return {
-      chartData,
-      totalKwh: data.total_energy
-    };
-  };
-  
-  const processYearlyData = (data: YearlyResponse): { chartData: ChartDataPoint[]; totalKwh: number; categoryBreakdown?: CategoryBreakdown } => {
-    const chartData = data.monthly_data.map(item => ({
-      name: formatMonth(item.month),
-      value: item.energy
-    }));
-    
-    return {
-      chartData,
-      totalKwh: data.total_energy
-    };
-  };
+  // Get current data based on mode and timeframe
+  const currentData =
+    mode === 'consumption'
+      ? consumptionData[timeframe]
+      : productionData[timeframe];
 
-  // Format functions for time display
-  const formatHour = (hour: number): string => {
-    const h = hour % 12 || 12;
-    const ampm = hour < 12 ? "AM" : "PM";
-    return `${h} ${ampm}`;
-  };
-  
-  const formatDay = (day: number): string => {
-    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-    return days[day % 7];
-  };
-  
-  const formatMonth = (month: number): string => {
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    return months[month - 1];
-  };
+  // Get total kWh based on mode
+  const totalKwh = mode === 'consumption' ? totalConsumption : totalProduction;
 
-  // Sample data fallback
-  const getSampleData = (mode: ModeType, timeframe: TimeframeType): { chartData: ChartDataPoint[]; totalKwh: number; categoryBreakdown: CategoryBreakdown } => {
-    // Daily data: 24 hours (AM/PM format)
-    const dayData: ChartDataPoint[] = [
-      { name: "12 AM", value: 3 },
-      { name: "1 AM", value: 2 },
-      { name: "2 AM", value: 2 },
-      // ... other hours
-      { name: "11 PM", value: 2 },
-    ];
-
-    // Weekly data: 7 days
-    const weekData: ChartDataPoint[] = [
-      { name: "Mon", value: 15 },
-      { name: "Tue", value: 18 },
-      { name: "Wed", value: 25 },
-      { name: "Thu", value: 22 },
-      { name: "Fri", value: 30 },
-      { name: "Sat", value: 28 },
-      { name: "Sun", value: 20 },
-    ];
-
-    // Yearly data: 12 months
-    const yearData: ChartDataPoint[] = [
-      { name: "Jan", value: 10 },
-      { name: "Feb", value: 12 },
-      // ... other months
-      { name: "Dec", value: 35 },
-    ];
-
-    const consumptionDataSets = {
-      day: dayData,
-      week: weekData,
-      year: yearData,
-    };
-
-    const productionDataSets = {
-      day: dayData.map((d) => ({ name: d.name, value: d.value * 0.8 })),
-      week: weekData.map((d) => ({ name: d.name, value: d.value * 0.9 })),
-      year: yearData.map((d) => ({ name: d.name, value: d.value * 0.85 })),
-    };
-
-    const consumptionBreakdown: CategoryBreakdown = {
-      lighting: 60,
-      appliances: 150,
-      hvac: 90,
-      electronics: 100
-    };
-
-    const productionBreakdown: CategoryBreakdown = {
-      solar: 250
-    };
-
-    return {
-      chartData: mode === "consumption" ? consumptionDataSets[timeframe] : productionDataSets[timeframe],
-      totalKwh: mode === "consumption" 
-        ? (timeframe === "day" ? 50 : timeframe === "week" ? 300 : 1200)
-        : (timeframe === "day" ? 40 : timeframe === "week" ? 250 : 700),
-      categoryBreakdown: mode === "consumption" ? consumptionBreakdown : productionBreakdown
-    };
-  };
-
-  const handleModeChange = (
-    event: React.MouseEvent<HTMLElement>,
-    newValue: ModeType | null
-  ): void => {
+  const handleModeChange = (event, newValue) => {
     if (newValue) {
-      // If switching to consumption and timeframe is year, change to day
-      if (newValue === "consumption" && state.timeframe === "year") {
-        setState(prevState => ({ ...prevState, mode: newValue, timeframe: "day" }));
-      } else {
-        setState(prevState => ({ ...prevState, mode: newValue }));
+      setMode(newValue);
+      // If switching from production to consumption and timeframe is year, reset to week
+      if (newValue === 'consumption' && timeframe === 'year') {
+        setTimeframe('week');
       }
     }
   };
 
-  const handleTimeframeChange = (
-    event: React.MouseEvent<HTMLElement>,
-    newValue: TimeframeType | null
-  ): void => {
-    if (newValue) {
-      // Prevent selecting year when in consumption mode
-      if (state.mode === "consumption" && newValue === "year") {
-        return;
-      }
-      setState(prevState => ({ ...prevState, timeframe: newValue }));
-    }
+  const handleTimeframeChange = (event, newValue) => {
+    if (newValue) setTimeframe(newValue);
   };
 
   // Chart width based on data length
-  const chartWidth = state.timeframe === "day" 
-    ? state.chartData.length * 40 
-    : state.chartData.length * 80;
+  const chartWidth = currentData?.length
+    ? timeframe === 'day'
+      ? currentData.length * 40
+      : currentData.length * 80
+    : 600;
 
   // Toggle button base styles
   const toggleBtnSx = {
-    textTransform: "none",
+    textTransform: 'none',
     width: 36,
     height: 36,
-    borderRadius: "50%",
-    fontSize: "14px",
-    fontWeight: "bold",
-    border: "none",
-    transition: "background-color 0.2s ease-in-out",
-    fontFamily: "Roboto, sans-serif",
+    borderRadius: '50%',
+    fontSize: '14px',
+    fontWeight: 'bold',
+    border: 'none',
+    transition: 'background-color 0.2s ease-in-out',
+    fontFamily: 'Roboto, sans-serif',
   };
 
   // Mode toggle (Consumption/Production)
   const modeToggleStyles = {
-    backgroundColor: "#F8F8F8",
-    border: "1px solid #ddd",
+    backgroundColor: '#F8F8F8',
+    border: '1px solid #ddd',
     p: 0.5,
-    borderRadius: "9999px",
-    "& .MuiToggleButton-root": {
+    borderRadius: '9999px',
+    '& .MuiToggleButton-root': {
       ...toggleBtnSx,
-      borderRadius: "17px",
-      textTransform: "none",
-      fontFamily: "inherit",
-      fontSize: "0.9rem",
-      color: "#666",
+      borderRadius: '17px',
+      textTransform: 'none',
+      fontFamily: 'inherit',
+      fontSize: '0.9rem',
+      color: '#666',
       minWidth: 110,
-      padding: "5px",
-      margin: "0 5px",
-      "&:hover": { backgroundColor: "#ECECEC" },
-      "&.Mui-selected": {
-        backgroundColor: "#6B97A4",
-        color: "#fff",
-        "&:hover": { backgroundColor: "#6B97A4" },
+      padding: '5px',
+      margin: '0 5px',
+      '&:hover': { backgroundColor: '#ECECEC' },
+      '&.Mui-selected': {
+        backgroundColor: '#6B97A4',
+        color: '#fff',
+        '&:hover': { backgroundColor: '#6B97A4' },
       },
     },
   };
 
   // Timeframe toggle (Day/Week/Year)
   const timeframeToggleStyles = {
-    backgroundColor: "#F8F8F8",
-    border: "1px solid #ddd",
+    backgroundColor: '#F8F8F8',
+    border: '1px solid #ddd',
     p: 0.5,
-    borderRadius: "9999px",
-    "& .MuiToggleButton-root": {
+    borderRadius: '9999px',
+    '& .MuiToggleButton-root': {
       ...toggleBtnSx,
-      borderRadius: "17px",
-      textTransform: "none",
-      fontFamily: "inherit",
-      fontSize: "0.9rem",
-      color: "#666",
+      borderRadius: '17px',
+      textTransform: 'none',
+      fontFamily: 'inherit',
+      fontSize: '0.9rem',
+      color: '#666',
       minWidth: 50,
-      padding: "5px",
-      margin: "0 5px",
-      "&:hover": { backgroundColor: "#ECECEC" },
-      "&.Mui-selected": {
-        backgroundColor: "#6B97A4",
-        color: "#fff",
-        "&:hover": { backgroundColor: "#6B97A4" },
+      padding: '5px',
+      margin: '0 5px',
+      '&:hover': { backgroundColor: '#ECECEC' },
+      '&.Mui-selected': {
+        backgroundColor: '#6B97A4',
+        color: '#fff',
+        '&:hover': { backgroundColor: '#6B97A4' },
       },
     },
   };
 
+  if (loading) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100vh',
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100vh',
+        }}
+      >
+        <Typography color="error">{error}</Typography>
+      </Box>
+    );
+  }
+
   return (
     <Box
       sx={{
-        minHeight: "100vh",
+        minHeight: '100vh',
         maxWidth: 600,
-        mx: "auto",
+        mx: 'auto',
         p: isMobile ? 2 : 3,
         pb: 10,
-        backgroundColor: "#fff",
-        fontFamily: "Roboto, sans-serif",
+        backgroundColor: '#fff',
+        fontFamily: 'Roboto, sans-serif',
       }}
     >
       {/* Top (centered) */}
-      <Box sx={{ textAlign: "center", mb: 4 }}>
+      <Box sx={{ textAlign: 'center', mb: 4 }}>
         <Typography
           variant="h6"
           fontWeight="bold"
-          sx={{ mb: 1, fontFamily: "inherit" }}
+          sx={{ mb: 1, fontFamily: 'inherit' }}
         >
           Welcome!
         </Typography>
         <Typography
           variant="body2"
           color="text.secondary"
-          sx={{ fontSize: "1rem", fontFamily: "inherit" }}
+          sx={{ fontSize: '1rem', fontFamily: 'inherit' }}
         >
           Check out your energy consumption or production below.
         </Typography>
       </Box>
 
+      {/* Location info */}
+      {userLocation && (
+        <Box sx={{ textAlign: 'center', mb: 3 }}>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ fontSize: '0.9rem', fontFamily: 'inherit' }}
+          >
+            Location:{' '}
+            {userLocation.name ||
+              `${userLocation.latitude.toFixed(
+                2
+              )}, ${userLocation.longitude.toFixed(2)}`}
+          </Typography>
+        </Box>
+      )}
+
       {/* Overview (left-aligned) */}
-      <Box sx={{ textAlign: "left", mb: 4 }}>
+      <Box sx={{ textAlign: 'left', mb: 4 }}>
         <Typography
           variant="h6"
           fontWeight="bold"
-          sx={{ mb: 2, fontFamily: "inherit" }}
+          sx={{ mb: 2, fontFamily: 'inherit' }}
         >
           Overview
         </Typography>
 
         {/* Consumption vs Production Toggle */}
         <ToggleButtonGroup
-          value={state.mode}
+          value={mode}
           exclusive
           onChange={handleModeChange}
           sx={{ ...modeToggleStyles, mb: 2 }}
@@ -530,55 +523,50 @@ const DashboardPage: React.FC = () => {
         <Typography
           variant="h6"
           fontWeight="bold"
-          sx={{ mb: 2, fontFamily: "inherit" }}
+          sx={{ mb: 2, fontFamily: 'inherit' }}
         >
-          {state.mode === "consumption"
-            ? `Total Consumption: ${state.totalKwh} kWh`
-            : `Total Production: ${state.totalKwh} kWh`}
+          {mode === 'consumption'
+            ? `Total Consumption: ${totalKwh} kWh`
+            : `Total Production: ${totalKwh} kWh`}
         </Typography>
 
-        {/* Timeframe Toggle (D/W/Y) */}
+        {/* Timeframe Toggle (D/W/Y) - Y only for production */}
         <ToggleButtonGroup
-          value={state.timeframe}
+          value={timeframe}
           exclusive
           onChange={handleTimeframeChange}
           sx={timeframeToggleStyles}
         >
           <ToggleButton value="day">D</ToggleButton>
           <ToggleButton value="week">W</ToggleButton>
-          {/* Only show Year option for Production */}
-          {state.mode === "production" && <ToggleButton value="year">Y</ToggleButton>}
+          {mode === 'production' && <ToggleButton value="year">Y</ToggleButton>}
         </ToggleButtonGroup>
       </Box>
 
       {/* Bar Chart Section */}
       <Box
         sx={{
-          width: "100%",
+          width: '100%',
           mb: 4,
-          overflowX: "auto",
-          scrollBehavior: "smooth",
-          "&::-webkit-scrollbar": { display: "none" },
-          scrollbarWidth: "none",
-        }}
-        onWheel={(e) => {
-          e.preventDefault();
-          (e.currentTarget as HTMLDivElement).scrollLeft += e.deltaY;
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          scrollBehavior: 'smooth',
         }}
       >
-        {state.loading ? (
-          <Typography>Loading data...</Typography>
-        ) : (
+        {currentData && currentData.length > 0 ? (
           <Box
             sx={{
               width: chartWidth,
               height: 200,
-              display: "flex",
-              mx: chartWidth < 600 ? "auto" : 0, // center if narrower than container
+              display: 'flex',
+              mx: chartWidth < 600 ? 'auto' : 0, // center if narrower than container
             }}
           >
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={state.chartData} margin={{ top: 5, right: 15, left: 0, bottom: 5 }}>
+              <BarChart
+                data={currentData}
+                margin={{ top: 5, right: 15, left: 0, bottom: 5 }}
+              >
                 <YAxis hide />
                 <XAxis
                   dataKey="name"
@@ -586,56 +574,109 @@ const DashboardPage: React.FC = () => {
                   axisLine={false}
                   tick={{
                     fontSize: 12,
-                    fill: "#666",
-                    fontFamily: "Roboto, sans-serif",
+                    fill: '#666',
+                    fontFamily: 'Roboto, sans-serif',
                   }}
                 />
                 <Tooltip
                   contentStyle={{
-                    borderRadius: "8px",
-                    border: "1px solid #ccc",
-                    fontFamily: "Roboto, sans-serif",
+                    borderRadius: '8px',
+                    border: '1px solid #ccc',
+                    fontFamily: 'Roboto, sans-serif',
                   }}
+                  formatter={(value) => [
+                    `${value} kWh`,
+                    mode === 'consumption' ? 'Consumption' : 'Production',
+                  ]}
                 />
-                <Bar
-                  dataKey="value"
-                  fill="#5A9FA3"
-                  barSize={12}
-                  radius={[4, 4, 0, 0]}
-                />
+                <Bar dataKey="value" fill="#6B97A4" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+          </Box>
+        ) : (
+          <Box sx={{ textAlign: 'center', py: 4 }}>
+            <Typography color="text.secondary">
+              No data available for the selected timeframe.
+            </Typography>
           </Box>
         )}
       </Box>
 
-      {/* Bottom Tiles */}
-      <Box sx={{ textAlign: "left", mb: 4 }}>
-        {state.mode === "consumption" ? (
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: "1rem",
-            }}
-          >
-            {Object.entries(state.categoryBreakdown).map(([category, value]) => (
+      {/* Category breakdown (only for consumption) */}
+      {mode === 'consumption' &&
+        Object.keys(categoryConsumption).length > 0 && (
+          <Box sx={{ mb: 4 }}>
+            <Typography
+              variant="h6"
+              fontWeight="bold"
+              sx={{ mb: 2, fontFamily: 'inherit' }}
+            >
+              Consumption by Category
+            </Typography>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '1rem',
+              }}
+            >
+              {Object.entries(categoryConsumption).map(([category, value]) => (
+                <Box
+                  key={category}
+                  sx={{
+                    p: 2,
+                    backgroundColor: '#f8f8f8',
+                    borderRadius: 2,
+                    border: '1px solid #e0e0e0',
+                    textAlign: 'center',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  <Typography variant="body2" sx={{ color: '#888', mb: 1 }}>
+                    {category}
+                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                    {value.toFixed(2)} kWh
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+          </Box>
+        )}
+
+      {/* Devices summary */}
+      <Box sx={{ mb: 4 }}>
+        <Typography
+          variant="h6"
+          fontWeight="bold"
+          sx={{ mb: 2, fontFamily: 'inherit' }}
+        >
+          Device Summary
+        </Typography>
+
+        {devices.length > 0 ? (
+          <Box sx={{ pl: 2 }}>
+            {devices.map((device) => (
               <Box
-                key={category}
+                key={device.deviceId}
                 sx={{
-                  p: 2,
-                  backgroundColor: "#f8f8f8",
-                  borderRadius: 2,
-                  border: "1px solid #e0e0e0",
-                  textAlign: "center",
-                  fontFamily: "inherit",
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  mb: 1,
+                  p: 1,
+                  borderRadius: 1,
+                  '&:hover': { backgroundColor: '#f5f5f5' },
                 }}
               >
-                <Typography variant="body2" sx={{ color: "#888", mb: 1 }}>
-                  {category.charAt(0).toUpperCase() + category.slice(1)}
+                <Typography sx={{ fontFamily: 'inherit' }}>
+                  {device.deviceName} ({device.quantity || 1}x)
                 </Typography>
-                <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                  {value} kWh
+                <Typography sx={{ fontFamily: 'inherit', color: '#666' }}>
+                  {device.powerRating
+                    ? `${device.powerRating.value} ${device.powerRating.unit}`
+                    : (device as any).powerRatingValue
+                    ? `${(device as any).powerRatingValue} W`
+                    : 'N/A'}
                 </Typography>
               </Box>
             ))}
@@ -643,65 +684,49 @@ const DashboardPage: React.FC = () => {
         ) : (
           <Box
             sx={{
-              p: 2,
-              backgroundColor: "#f8f8f8",
+              textAlign: 'center',
+              py: 2,
+              backgroundColor: '#f8f8f8',
               borderRadius: 2,
-              border: "1px solid #e0e0e0",
-              textAlign: "center",
-              maxWidth: 300,
-              fontFamily: "inherit",
             }}
           >
-            <Typography variant="body2" sx={{ color: "#888", mb: 1 }}>
-              Solar Panels
-            </Typography>
-            <Typography variant="h6" sx={{ fontWeight: 700 }}>
-              {state.categoryBreakdown.solar || 0} kWh
+            <Typography color="text.secondary">
+              No devices added yet.
             </Typography>
           </Box>
         )}
+      </Box>
+
+      {/* Energy saving tips */}
+      <Box sx={{ mb: 4 }}>
+        <Typography
+          variant="h6"
+          fontWeight="bold"
+          sx={{ mb: 2, fontFamily: 'inherit' }}
+        >
+          Energy Saving Tips
+        </Typography>
+        <Box
+          sx={{
+            p: 2,
+            backgroundColor: '#f0f7fa',
+            borderRadius: 2,
+            border: '1px solid #d0e6f0',
+          }}
+        >
+          <Typography sx={{ mb: 1, fontFamily: 'inherit' }}>
+            • Turn off lights when not in use
+          </Typography>
+          <Typography sx={{ mb: 1, fontFamily: 'inherit' }}>
+            • Use energy-efficient appliances
+          </Typography>
+          <Typography sx={{ fontFamily: 'inherit' }}>
+            • Adjust thermostat settings seasonally
+          </Typography>
+        </Box>
       </Box>
     </Box>
   );
 };
 
 export default DashboardPage;
-// API Response Types
-interface HourlyDataPoint {
-  hour: number;
-  energy: number;
-}
-
-interface DailyDataPoint {
-  day: number;
-  energy: number;
-}
-
-interface MonthlyDataPoint {
-  month: number;
-  energy: number;
-}
-
-interface HourlyResponse {
-  hourly_data: HourlyDataPoint[];
-  total_energy: number;
-  category_breakdown?: {
-    [key: string]: number;
-  };
-}
-
-interface DailyResponse {
-  daily_data: DailyDataPoint[];
-  total_energy: number;
-  category_breakdown?: {
-    [key: string]: number;
-  };
-}
-
-interface YearlyResponse {
-  monthly_data: MonthlyDataPoint[];
-  total_energy: number;
-  category_breakdown?: {
-    [key: string]: number;
-  };
-}

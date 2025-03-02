@@ -1,6 +1,6 @@
-import React, { useState } from "react";
-import { Line } from "react-chartjs-2";
-import { ChartData } from "chart.js";
+import React, { useEffect, useState } from 'react';
+import { Line } from 'react-chartjs-2';
+import { ChartData } from 'chart.js';
 import {
   Box,
   Typography,
@@ -10,9 +10,9 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-} from "@mui/material";
-import { useNavigate, useLocation } from "react-router-dom";
-import dayjs from "dayjs";
+} from '@mui/material';
+import { useNavigate, useLocation } from 'react-router-dom';
+import dayjs from 'dayjs';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -22,12 +22,12 @@ import {
   Title,
   Tooltip,
   Legend,
-} from "chart.js";
+} from 'chart.js';
 
 // Icons
-import WbSunnyIcon from "@mui/icons-material/WbSunny";
-import NatureIcon from "@mui/icons-material/Nature";
-import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import WbSunnyIcon from '@mui/icons-material/WbSunny';
+import NatureIcon from '@mui/icons-material/Nature';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 
 // Register Chart.js components
 ChartJS.register(
@@ -46,34 +46,39 @@ interface FactorBoxProps {
   value: string;
   description: string;
 }
-const FactorBox: React.FC<FactorBoxProps> = ({ icon, title, value, description }) => (
+const FactorBox: React.FC<FactorBoxProps> = ({
+  icon,
+  title,
+  value,
+  description,
+}) => (
   <Box
     sx={{
-      backgroundColor: "#F5F5F5",
+      backgroundColor: '#F5F5F5',
       p: { xs: 1.5, sm: 2 },
-      borderRadius: "12px",
-      display: "flex",
-      flexDirection: "column",
+      borderRadius: '12px',
+      display: 'flex',
+      flexDirection: 'column',
       gap: 1,
-      width: "100%",
-      boxSizing: "border-box",
+      width: '100%',
+      boxSizing: 'border-box',
     }}
   >
     <Box
       sx={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
       }}
     >
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         {icon}
         <Typography
           variant="subtitle1"
           sx={{
-            color: "#5A8DEE",
-            fontWeight: "bold",
-            fontSize: { xs: "14px", sm: "16px" },
+            color: '#5A8DEE',
+            fontWeight: 'bold',
+            fontSize: { xs: '14px', sm: '16px' },
           }}
         >
           {title}
@@ -82,8 +87,8 @@ const FactorBox: React.FC<FactorBoxProps> = ({ icon, title, value, description }
       <Typography
         variant="subtitle1"
         sx={{
-          fontWeight: "bold",
-          fontSize: { xs: "14px", sm: "16px" },
+          fontWeight: 'bold',
+          fontSize: { xs: '14px', sm: '16px' },
         }}
       >
         {value}
@@ -91,7 +96,7 @@ const FactorBox: React.FC<FactorBoxProps> = ({ icon, title, value, description }
     </Box>
     <Typography
       variant="body2"
-      sx={{ color: "gray", fontSize: { xs: "12px", sm: "14px" } }}
+      sx={{ color: 'gray', fontSize: { xs: '12px', sm: '14px' } }}
     >
       {description}
     </Typography>
@@ -99,9 +104,36 @@ const FactorBox: React.FC<FactorBoxProps> = ({ icon, title, value, description }
 );
 
 const DeviceDetails: React.FC = () => {
-  const [view, setView] = useState<"week" | "month">("week");
+  const [weatherData, setWeatherData] = useState(null);
+  const [view, setView] = useState<'week' | 'month'>('week');
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    const fetchWeatherData = async () => {
+      const userLocation = JSON.parse(localStorage.getItem('userLocation'));
+      if (userLocation) {
+        try {
+          const response = await fetch(
+            'https://eemp-backend-production.up.railway.app/weather/daily',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(userLocation),
+            }
+          );
+          const data = await response.json();
+          setWeatherData(data.daily[0]);
+        } catch (error) {
+          console.error('Error fetching weather data:', error);
+        }
+      }
+    };
+  
+    fetchWeatherData();
+  }, []);
 
   // Get device from route state
   const { device } = (location.state as { device?: any }) || {};
@@ -110,19 +142,17 @@ const DeviceDetails: React.FC = () => {
   const [openRemoveDialog, setOpenRemoveDialog] = useState(false);
 
   // 7-day labels
-  const weekLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const weekLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   // 1) Convert power ratings to kW
-  const powerRatingKW =
-    device?.powerRating
-      ? Number(device.powerRating.value) /
-        (device.powerRating.unit === "W" ? 1000 : 1)
-      : 0;
-  const standbyPowerKW =
-    device?.standbyPower
-      ? Number(device.standbyPower.value) /
-        (device.standbyPower.unit === "W" ? 1000 : 1)
-      : 0;
+  const powerRatingKW = device?.powerRating
+    ? Number(device.powerRating.value) /
+      (device.powerRating.unit === 'W' ? 1000 : 1)
+    : 0;
+  const standbyPowerKW = device?.standbyPower
+    ? Number(device.standbyPower.value) /
+      (device.standbyPower.unit === 'W' ? 1000 : 1)
+    : 0;
 
   // 2) Compute daily usage hours for each day
   let dailyUsageHours: number[] = Array(7).fill(0);
@@ -135,7 +165,7 @@ const DeviceDetails: React.FC = () => {
       const end = dayjs(ut.end);
       if (!start.isValid() || !end.isValid()) return 0;
 
-      let hours = end.diff(start, "hour", true);
+      let hours = end.diff(start, 'hour', true);
       // If negative, assume overnight usage
       if (hours < 0) {
         hours += 24;
@@ -153,8 +183,8 @@ const DeviceDetails: React.FC = () => {
   // 3) Compute energy breakdown per day
   const computedDailyBreakdown = dailyUsageHours.map((hours) => {
     const activeEnergy = powerRatingKW * hours; // kWh
-    const peakEnergy = activeEnergy * 0.4;      // 40% peak
-    const offPeakEnergy = activeEnergy * 0.6;   // 60% off-peak
+    const peakEnergy = activeEnergy * 0.4; // 40% peak
+    const offPeakEnergy = activeEnergy * 0.6; // 60% off-peak
     const standbyEnergy = standbyPowerKW * (24 - hours);
     return { peak: peakEnergy, offPeak: offPeakEnergy, standby: standbyEnergy };
   });
@@ -163,14 +193,14 @@ const DeviceDetails: React.FC = () => {
   const computedDailyConsumptions = computedDailyBreakdown.map(
     (b) => b.peak + b.offPeak + b.standby
   );
-  const computedWeeklyData: ChartData<"line"> = {
+  const computedWeeklyData: ChartData<'line'> = {
     labels: weekLabels,
     datasets: [
       {
-        label: "Energy Consumption (kWh)",
+        label: 'Energy Consumption (kWh)',
         data: computedDailyConsumptions,
-        borderColor: "#5A8DEE",
-        backgroundColor: "rgba(90,141,238,0.2)",
+        borderColor: '#5A8DEE',
+        backgroundColor: 'rgba(90,141,238,0.2)',
         tension: 0.4,
         pointRadius: 6,
       },
@@ -179,8 +209,14 @@ const DeviceDetails: React.FC = () => {
 
   // 5) Compute weekly sums & averages for monthly data
   const sumPeak = computedDailyBreakdown.reduce((acc, b) => acc + b.peak, 0);
-  const sumOffPeak = computedDailyBreakdown.reduce((acc, b) => acc + b.offPeak, 0);
-  const sumStandby = computedDailyBreakdown.reduce((acc, b) => acc + b.standby, 0);
+  const sumOffPeak = computedDailyBreakdown.reduce(
+    (acc, b) => acc + b.offPeak,
+    0
+  );
+  const sumStandby = computedDailyBreakdown.reduce(
+    (acc, b) => acc + b.standby,
+    0
+  );
   const sumTotal = computedDailyConsumptions.reduce((acc, val) => acc + val, 0);
 
   const averagePeak = sumPeak / 7;
@@ -191,14 +227,14 @@ const DeviceDetails: React.FC = () => {
   // For monthly chart, assume 30 days each month
   const monthlyLabels = Array.from({ length: 12 }, (_, i) => `Month ${i + 1}`);
   const monthlyValues = Array(12).fill(+(averageTotal * 30).toFixed(2));
-  const computedMonthlyData: ChartData<"line"> = {
+  const computedMonthlyData: ChartData<'line'> = {
     labels: monthlyLabels,
     datasets: [
       {
-        label: "Energy Consumption (kWh)",
+        label: 'Energy Consumption (kWh)',
         data: monthlyValues,
-        borderColor: "#5A8DEE",
-        backgroundColor: "rgba(90,141,238,0.2)",
+        borderColor: '#5A8DEE',
+        backgroundColor: 'rgba(90,141,238,0.2)',
         tension: 0.4,
         pointRadius: 6,
       },
@@ -208,8 +244,8 @@ const DeviceDetails: React.FC = () => {
   // 6) Compute the "peak hours on average" across the entire week
   //    We'll treat each day's usage interval as a start/end in fractional hours (0..24).
   //    Then we sum & average them to get an overall "average start" and "average end."
-  let avgPeakHoursStart = "";
-  let avgPeakHoursEnd = "";
+  let avgPeakHoursStart = '';
+  let avgPeakHoursEnd = '';
 
   if (device?.usagePattern?.usage_times) {
     let sumStart = 0;
@@ -222,7 +258,8 @@ const DeviceDetails: React.FC = () => {
       if (!start.isValid() || !end.isValid()) return;
 
       // Convert to fractional hour of day (0..24+)
-      let startHour = start.hour() + start.minute() / 60 + start.second() / 3600;
+      let startHour =
+        start.hour() + start.minute() / 60 + start.second() / 3600;
       let endHour = end.hour() + end.minute() / 60 + end.second() / 3600;
 
       // If end is before start => overnight => endHour += 24
@@ -244,89 +281,130 @@ const DeviceDetails: React.FC = () => {
 
       // Convert fractional hours back to dayjs time
       // We'll pick an arbitrary reference date, e.g. 1970-01-01
-      const referenceDate = dayjs("1970-01-01");
-      const avgStartTime = referenceDate.add(avgStart, "hour");
-      const avgEndTime = referenceDate.add(avgEnd, "hour");
+      const referenceDate = dayjs('1970-01-01');
+      const avgStartTime = referenceDate.add(avgStart, 'hour');
+      const avgEndTime = referenceDate.add(avgEnd, 'hour');
 
-      avgPeakHoursStart = avgStartTime.format("h:mm A");
-      avgPeakHoursEnd = avgEndTime.format("h:mm A");
+      avgPeakHoursStart = avgStartTime.format('h:mm A');
+      avgPeakHoursEnd = avgEndTime.format('h:mm A');
 
       // If avgEnd > 24 => we might show e.g. "2:00 AM (next day)" logic
       // For clarity, you can add a note if it extends past 24 hours
       if (avgEnd >= 24) {
         // e.g. subtract 24 from display to show the next day's time
-        const nextDayEnd = referenceDate.add(avgEnd - 24, "hour");
-        avgPeakHoursEnd = `${nextDayEnd.format("h:mm A")} (next day)`;
+        const nextDayEnd = referenceDate.add(avgEnd - 24, 'hour');
+        avgPeakHoursEnd = `${nextDayEnd.format('h:mm A')} (next day)`;
       }
     }
   }
 
   // Last updated info
-  const lastUpdatedDate = device?.lastUpdated ? new Date(device.lastUpdated) : new Date();
+  const lastUpdatedDate = device?.lastUpdated
+    ? new Date(device.lastUpdated)
+    : new Date();
   const lastUpdatedString = lastUpdatedDate.toLocaleString();
 
-  // Remove device logic
-  const handleConfirmRemove = () => {
-    const storedDevices = JSON.parse(localStorage.getItem("devices") || "[]");
-    const updatedDevices = storedDevices.filter((d: any) => d.deviceId !== device.deviceId);
-    localStorage.setItem("devices", JSON.stringify(updatedDevices));
-    setOpenRemoveDialog(false);
-    navigate("/management");
+  const getCurrentSeason = () => {
+    const now = new Date();
+    const month = now.getMonth();
+
+    if (month >= 3 && month <= 4)
+      return {
+        name: 'Spring',
+        message:
+          'Daylight hours increasing; decreased lighting and heating usage expected.',
+      };
+    if (month >= 5 && month <= 7)
+      return {
+        name: 'Summer',
+        message: 'Long daylight hours; minimal lighting and maximum cooling usage expected.',
+      };
+    if (month >= 8 && month <= 10)
+      return {
+        name: 'Fall',
+        message:
+          'Daylight hours decreasing; increased lighting and heating usage expected.',
+      };
+    return {
+      name: 'Winter',
+      message: 'Short daylight hours; maximum lighting and heating usage expected.',
+    };
   };
 
+  // Remove device logic
+  const handleOpenRemoveDialog = () => setOpenRemoveDialog(true);
+  const handleCloseRemoveDialog = () => setOpenRemoveDialog(false);
+  const handleConfirmRemove = () => {
+    const storedDevices = JSON.parse(localStorage.getItem('devices') || '[]');
+    const updatedDevices = storedDevices.filter(
+      (d: any) => d.deviceId !== device.deviceId
+    );
+    localStorage.setItem('devices', JSON.stringify(updatedDevices));
+    setOpenRemoveDialog(false);
+    navigate('/management');
+  };
+
+  const currentSeason = getCurrentSeason();
+
   return (
-    <Box sx={{ p: 3, maxWidth: 600, margin: "0 auto" }}>
+    <Box sx={{ p: 3, maxWidth: 600, margin: '0 auto' }}>
       {/* Device Name & Last Updated */}
-      <Typography variant="h5" gutterBottom sx={{ fontWeight: "bold" }}>
-        {device?.deviceName ?? device?.name ?? "Device"}
+      <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold' }}>
+        {device?.deviceName ?? device?.name ?? 'Device'}
       </Typography>
       <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
         Last updated {lastUpdatedString}
       </Typography>
 
       {/* Energy Consumption */}
-      <Typography variant="h6" sx={{ fontWeight: "bold", mb: 2 }}>
+      <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
         Energy Consumption
       </Typography>
-      <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 2, mb: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mb: 2 }}>
         <ToggleButton
           value="week"
-          selected={view === "week"}
-          onClick={() => setView("week")}
+          selected={view === 'week'}
+          onClick={() => setView('week')}
           sx={{
-            textTransform: "none",
+            textTransform: 'none',
             width: 42,
             height: 42,
-            borderRadius: "50%",
-            fontSize: "16px",
-            fontWeight: "bold",
-            backgroundColor: view === "week" ? "#6B97A4" : "#F5F5F5",
-            color: view === "week" ? "#fff" : "#000",
-            border: "none",
-            transition: "background-color 0.2s ease-in-out",
-            "&.Mui-selected": { backgroundColor: "#6B97A4 !important", color: "#fff" },
-            "&:hover": { backgroundColor: "#6B97A4", color: "#fff" },
+            borderRadius: '50%',
+            fontSize: '16px',
+            fontWeight: 'bold',
+            backgroundColor: view === 'week' ? '#6B97A4' : '#F5F5F5',
+            color: view === 'week' ? '#fff' : '#000',
+            border: 'none',
+            transition: 'background-color 0.2s ease-in-out',
+            '&.Mui-selected': {
+              backgroundColor: '#6B97A4 !important',
+              color: '#fff',
+            },
+            '&:hover': { backgroundColor: '#6B97A4', color: '#fff' },
           }}
         >
           W
         </ToggleButton>
         <ToggleButton
           value="month"
-          selected={view === "month"}
-          onClick={() => setView("month")}
+          selected={view === 'month'}
+          onClick={() => setView('month')}
           sx={{
-            textTransform: "none",
+            textTransform: 'none',
             width: 42,
             height: 42,
-            borderRadius: "50%",
-            fontSize: "16px",
-            fontWeight: "bold",
-            backgroundColor: view === "month" ? "#6B97A4" : "#F5F5F5",
-            color: view === "month" ? "#fff" : "#000",
-            border: "none",
-            transition: "background-color 0.2s ease-in-out",
-            "&.Mui-selected": { backgroundColor: "#6B97A4 !important", color: "#fff" },
-            "&:hover": { backgroundColor: "#6B97A4", color: "#fff" },
+            borderRadius: '50%',
+            fontSize: '16px',
+            fontWeight: 'bold',
+            backgroundColor: view === 'month' ? '#6B97A4' : '#F5F5F5',
+            color: view === 'month' ? '#fff' : '#000',
+            border: 'none',
+            transition: 'background-color 0.2s ease-in-out',
+            '&.Mui-selected': {
+              backgroundColor: '#6B97A4 !important',
+              color: '#fff',
+            },
+            '&:hover': { backgroundColor: '#6B97A4', color: '#fff' },
           }}
         >
           M
@@ -334,7 +412,7 @@ const DeviceDetails: React.FC = () => {
       </Box>
       <Box sx={{ height: 250, mb: 3 }}>
         <Line
-          data={view === "week" ? computedWeeklyData : computedMonthlyData}
+          data={view === 'week' ? computedWeeklyData : computedMonthlyData}
           options={{
             responsive: true,
             maintainAspectRatio: false,
@@ -344,7 +422,7 @@ const DeviceDetails: React.FC = () => {
                 beginAtZero: true,
                 min: 0,
                 max:
-                  view === "week"
+                  view === 'week'
                     ? Math.max(...computedDailyConsumptions, 1) * 1.2
                     : (averageTotal * 30 || 1) * 1.2,
               },
@@ -354,48 +432,59 @@ const DeviceDetails: React.FC = () => {
       </Box>
 
       {/* Estimated Cost / Breakdown */}
-      <Box sx={{ display: "flex", flexDirection: "column", gap: 1, mb: 3 }}>
-        <Typography variant="h6" sx={{ fontWeight: "bold", mb: 1 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 3 }}>
+        <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>
           Estimated Cost
         </Typography>
-        <Typography variant="h4" sx={{ fontWeight: "bold" }}>
+        <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
           {(averageTotal * 30).toFixed(2)} kWh/month
         </Typography>
         <Typography variant="body2">
-          <span style={{ color: "red" }}>●</span> Peak: {(averagePeak * 30).toFixed(2)} kWh
+          <span style={{ color: 'red' }}>●</span> Peak:{' '}
+          {(averagePeak * 30).toFixed(2)} kWh
         </Typography>
         <Typography variant="body2">
-          <span style={{ color: "green" }}>●</span> Off-Peak: {(averageOffPeak * 30).toFixed(2)} kWh
+          <span style={{ color: 'green' }}>●</span> Off-Peak:{' '}
+          {(averageOffPeak * 30).toFixed(2)} kWh
         </Typography>
         <Typography variant="body2">
-          <span style={{ color: "gold" }}>●</span> Standby: {(averageStandby * 30).toFixed(2)} kWh
+          <span style={{ color: 'gold' }}>●</span> Standby:{' '}
+          {(averageStandby * 30).toFixed(2)} kWh
         </Typography>
       </Box>
 
       {/* External Factors */}
-      <Typography variant="h6" sx={{ fontWeight: "bold", mb: 2 }}>
+      <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
         External Factors
       </Typography>
-      <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mb: 3 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 3 }}>
         <FactorBox
-          icon={<WbSunnyIcon sx={{ color: "black" }} />}
+          icon={<WbSunnyIcon sx={{ color: 'black' }} />}
           title="Weather"
-          value="Sunny, 24°C"
-          description="Reduced usage likely due to sunlight."
+          value={`${weatherData?.weather[0]?.main}, ${Math.round(
+            weatherData?.temp?.day
+          )}°C`}
+          description={
+            weatherData?.weather[0]?.main.toLowerCase() === 'clear'
+              ? 'Reduced usage likely due to sunlight.'
+              : 'Increased usage likely due to lack of sunlight.'
+          }
         />
+
         <FactorBox
-          icon={<NatureIcon sx={{ color: "black" }} />}
+          icon={<NatureIcon sx={{ color: 'black' }} />}
           title="Season"
-          value="Fall"
-          description="Daylight hours decreasing; increased lighting usage expected."
+          value={currentSeason.name}
+          description={currentSeason.message}
         />
+
         <FactorBox
-          icon={<AccessTimeIcon sx={{ color: "black" }} />}
+          icon={<AccessTimeIcon sx={{ color: 'black' }} />}
           title="Peak Hours"
           value={
             avgPeakHoursStart && avgPeakHoursEnd
               ? `${avgPeakHoursStart} - ${avgPeakHoursEnd}`
-              : "N/A"
+              : 'N/A'
           }
           description="Average usage interval across all days."
         />
@@ -404,10 +493,10 @@ const DeviceDetails: React.FC = () => {
       {/* Action Buttons */}
       <Box
         sx={{
-          display: "flex",
-          justifyContent: "center",
+          display: 'flex',
+          justifyContent: 'center',
           gap: 2,
-          flexWrap: "wrap",
+          flexWrap: 'wrap',
         }}
       >
         <Button
@@ -415,12 +504,12 @@ const DeviceDetails: React.FC = () => {
           onClick={() => navigate(-1)}
           sx={{
             flex: 1,
-            backgroundColor: "#000",
-            color: "#fff",
-            textTransform: "none",
-            p: { xs: "10px 20px", sm: "14px 28px" },
-            borderRadius: "8px",
-            ":hover": { backgroundColor: "#333" },
+            backgroundColor: '#000',
+            color: '#fff',
+            textTransform: 'none',
+            p: { xs: '10px 20px', sm: '14px 28px' },
+            borderRadius: '8px',
+            ':hover': { backgroundColor: '#333' },
           }}
         >
           Go Back
@@ -430,12 +519,12 @@ const DeviceDetails: React.FC = () => {
           onClick={() => setOpenRemoveDialog(true)}
           sx={{
             flex: 1,
-            backgroundColor: "#000",
-            color: "#fff",
-            textTransform: "none",
-            p: { xs: "10px 20px", sm: "14px 28px" },
-            borderRadius: "8px",
-            ":hover": { backgroundColor: "#333" },
+            backgroundColor: '#000',
+            color: '#fff',
+            textTransform: 'none',
+            p: { xs: '10px 20px', sm: '14px 28px' },
+            borderRadius: '8px',
+            ':hover': { backgroundColor: '#333' },
           }}
         >
           Remove Device
@@ -447,27 +536,28 @@ const DeviceDetails: React.FC = () => {
         open={openRemoveDialog}
         onClose={() => setOpenRemoveDialog(false)}
         PaperProps={{
-          sx: { borderRadius: 4, textAlign: "center", p: 3 },
+          sx: { borderRadius: 4, textAlign: 'center', p: 3 },
         }}
       >
-        <DialogTitle sx={{ fontWeight: "bold" }}>
-          Remove {device?.deviceName || device?.name || "Device"}?
+        <DialogTitle sx={{ fontWeight: 'bold' }}>
+          Remove {device?.deviceName || device?.name || 'Device'}?
         </DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to remove this device? This action cannot be undone.
+            Are you sure you want to remove this device? This action cannot be
+            undone.
           </Typography>
         </DialogContent>
-        <DialogActions sx={{ justifyContent: "center", gap: 2 }}>
+        <DialogActions sx={{ justifyContent: 'center', gap: 2 }}>
           <Button
             variant="contained"
             onClick={() => setOpenRemoveDialog(false)}
             sx={{
-              backgroundColor: "#ccc",
-              color: "#000",
-              textTransform: "none",
-              borderRadius: "8px",
-              ":hover": { backgroundColor: "#aaa" },
+              backgroundColor: '#ccc',
+              color: '#000',
+              textTransform: 'none',
+              borderRadius: '8px',
+              ':hover': { backgroundColor: '#aaa' },
             }}
           >
             Cancel
@@ -476,11 +566,11 @@ const DeviceDetails: React.FC = () => {
             variant="contained"
             onClick={handleConfirmRemove}
             sx={{
-              backgroundColor: "red",
-              color: "#fff",
-              textTransform: "none",
-              borderRadius: "8px",
-              ":hover": { backgroundColor: "#b71c1c" },
+              backgroundColor: 'red',
+              color: '#fff',
+              textTransform: 'none',
+              borderRadius: '8px',
+              ':hover': { backgroundColor: '#b71c1c' },
             }}
           >
             Remove
