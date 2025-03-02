@@ -145,8 +145,8 @@ class WeatherDataFull(BaseModel):
 
 
 class PromptRequest(BaseModel):
-    solar_panel_data: SolarPanelData
-    devices: List[Device]
+    solar_panel_data: Optional[SolarPanelData] = None
+    devices: Optional[List[Device]] = None
     location: LocationData
     weather_data: Optional[List[WeatherDataFull]] = None
 
@@ -154,22 +154,24 @@ class PromptRequest(BaseModel):
         # Format weather data if present
         weather_str = "\n".join(str(w) for w in self.weather_data) if self.weather_data else "No weather data provided"
 
-        # Format device list
-        devices_str = "\n".join(f"- {device}" for device in self.devices)
+        # Format device list if present
+        devices_str = "\n".join(f"- {device}" for device in self.devices) if self.devices else "No devices provided"
+
+        # Format solar panel data if present
+        solar_panel_str = str(self.solar_panel_data) if self.solar_panel_data else "No solar panel data provided"
 
         return f"""
         Energy Optimization Analysis Request
         ------------------------------------
         📍 Location: {self.location}
-    
+
         ☀️ Solar Panel System:
-        {self.solar_panel_data}
-    
+        {solar_panel_str}
+
         🌦️ Weather Forecast:
         {weather_str}
-    
+
         💡 Devices in Use:
         {devices_str}
         ------------------------------------
         """
-
