@@ -232,7 +232,7 @@ async def predict_hourly(request: PredictionRequest):
     hourly_weather = get_hourly_weather_data(request.location)
     weather_parsed = parse_hourly_response(hourly_weather, request.location.timezone)
     weather_full = calculate_radiation(
-        SolarPanelData(tilt=30, orientation=180),
+        SolarPanelData(tilt=30, orientation=180, number_of_strings=0, modules_per_string=0),
         weather_parsed,
         request.location
     )
@@ -262,7 +262,7 @@ async def predict_daily(request: PredictionRequest):
     daily_weather = get_daily_weather_data(request.location)
     weather_parsed = parse_daily_response(daily_weather, request.location.timezone)
     weather_full = calculate_radiation(
-        SolarPanelData(tilt=30, orientation=180),
+        SolarPanelData(tilt=30, orientation=180, number_of_strings=0, modules_per_string=0),
         weather_parsed,
         request.location
     )
