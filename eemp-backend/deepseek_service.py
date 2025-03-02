@@ -243,6 +243,8 @@ def calculate_current_efficiency(solar_panel_data, devices, timezone):
         current_date = datetime.now(tz)
         print(f"Unknown timezone: {timezone}, falling back to UTC")
 
+    devices = devices or []
+
     # Set default values for solar panel data
     panel_capacity_kw = 0
     panel_efficiency = 0
@@ -254,9 +256,12 @@ def calculate_current_efficiency(solar_panel_data, devices, timezone):
         panel_capacity_kw = solar_panel_data.capacity / 1000  # Convert W to kW
         panel_efficiency = solar_panel_data.efficiency / 100  # Convert % to decimal
         solar_daily_production = panel_capacity_kw * panel_efficiency * avg_sunlight_hours
+    else:
+        solar_daily_production = 0
 
     # Device current energy consumption (kWh/day)
     total_device_consumption = 0
+
     for device in devices:
         if device.powerRating.unit == 'kW':
             power_rating_kw = device.powerRating.value
