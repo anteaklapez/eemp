@@ -98,6 +98,8 @@ class SolarPanelData(BaseModel):
     module_name: str | None = None
     tilt: float # tilt in degrees
     orientation: float # == azimuth
+    number_of_strings: int
+    modules_per_string: int
     capacity: float | None = None
     efficiency: float | None = None
     installation_year: int | None = None

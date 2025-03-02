@@ -114,6 +114,10 @@ async def calculate_energy(request: Request, solar_panel_data: SolarPanelData, w
     # Extract and clean energy output - vectorized operations
     energy_output = pd.Series(mc.results.ac.fillna(0).clip(lower=0).round(2).squeeze(), name="energy_output")
 
+    # Scale the output based on the number of panels
+    total_panels = solar_panel_data.number_of_strings * solar_panel_data.modules_per_string
+    energy_output = (energy_output * total_panels / 1000).round(2)
+
     # Format index to ISO 8601 with timezone - use vectorized strftime
     energy_output.index = energy_output.index.strftime("%Y-%m-%dT%H:%M:%S%z")
 
@@ -248,6 +252,12 @@ async def calculate_energy_with_tmy(
                 raise ValueError("AC output is missing from the model results.")
             # Resample to monthly sums using end-of-month frequency.
             monthly_energy = ac_output.resample('ME').sum()
+
+
+            # Scale the output based on the number of panels
+            total_panels = solar_panel_data.number_of_strings * solar_panel_data.modules_per_string
+            monthly_energy = (monthly_energy * total_panels / 1000).round(2)
+
             return monthly_energy
         except Exception as e:
             logger.error(f"Error processing TMY data for year {year}: {e}")
@@ -265,10 +275,9 @@ async def calculate_energy_with_tmy(
         raise ValueError("No valid TMY data available for the 15-year range.")
 
     # Vectorized operation for combining monthly data
-    combined_monthly = pd.concat(monthly_outputs, axis=1).mean(axis=1)
+    combined_monthly = pd.concat(monthly_outputs, axis=1).mean(axis=1).round(2)
     combined_monthly.index = combined_monthly.index.strftime('%B')
     combined_monthly.name = f"15-Year Average Monthly Energy Production ({name})"
-
     return combined_monthly
 
 
