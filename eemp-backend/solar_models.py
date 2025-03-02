@@ -152,13 +152,13 @@ class PromptRequest(BaseModel):
 
     def __str__(self):
         # Format weather data if present
-        weather_str = "\n".join(str(w) for w in self.weather_data) if self.weather_data else "No weather data provided"
+        weather_str = "\n".join(str(w) for w in self.weather_data) if self.weather_data else "No weather data currently"
 
         # Format device list if present
-        devices_str = "\n".join(f"- {device}" for device in self.devices) if self.devices else "No devices provided"
+        devices_str = "\n".join(f"- {device}" for device in self.devices) if self.devices else "No devices currently"
 
         # Format solar panel data if present
-        solar_panel_str = str(self.solar_panel_data) if self.solar_panel_data else "No solar panel data provided"
+        solar_panel_str = str(self.solar_panel_data) if self.solar_panel_data else "No solar panels currently"
 
         return f"""
         Energy Optimization Analysis Request
