@@ -83,7 +83,7 @@ async def get_recommendations(request):
       json_match = re.search(r'(?s)\{.*\}', raw_response)
 
       if not json_match:
-        await get_recommendations(request)
+        return await get_recommendations(request)
 
       json_str = json_match.group(0)
       parsed = RecommendationResponse.model_validate_json(json_str)
