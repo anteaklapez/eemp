@@ -199,7 +199,7 @@ const DeviceForm: React.FC = () => {
   const [openError, setOpenError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Define modulesList here once so it runs every render in the same order.
+  // Define modulesList so it remains in the same order on every render.
   const modulesList = useMemo(() => [...cecModules, ...sandiaModules], []);
 
   // ---------------- Effects ----------------
@@ -212,9 +212,7 @@ const DeviceForm: React.FC = () => {
       ) {
         setFormData({
           ...device,
-          peakHoursStart: device.peakHoursStart
-            ? dayjs(device.peakHoursStart)
-            : null,
+          peakHoursStart: device.peakHoursStart ? dayjs(device.peakHoursStart) : null,
           peakHoursEnd: device.peakHoursEnd ? dayjs(device.peakHoursEnd) : null,
           weekStart: device.weekStart ? dayjs(device.weekStart) : dayjs(),
           usageTimes: device.usageTimes
@@ -253,6 +251,12 @@ const DeviceForm: React.FC = () => {
           roomName: device.room?.roomName || '',
           roomType: device.room?.roomType || '',
           roomId: device.room?.roomId || '',
+          numberOfDevices:
+            device.quantity !== undefined
+              ? device.quantity.toString()
+              : device.numberOfDevices
+              ? device.numberOfDevices.toString()
+              : '',
         });
       }
       setIsEditing(true);
@@ -260,6 +264,7 @@ const DeviceForm: React.FC = () => {
     }
   }, [location.state]);
 
+  // For solar panels, keep the behavior unchanged (except for state pre-population)
   useEffect(() => {
     if (formData.category === 'Solar Panel') {
       const savedLocation = localStorage.getItem('userLocation');
@@ -376,33 +381,23 @@ const DeviceForm: React.FC = () => {
     }
   }, [formData.category]);
 
-  // ------------- New Effect: Aggregate quantity -------------
+  // Aggregate quantity effect only for normal devices
   useEffect(() => {
+    if (formData.category === 'Solar Panel') return;
     if (formData.category && formData.roomName) {
       const existingDevices = JSON.parse(localStorage.getItem('devices') || '[]');
-      // For solar panels, the device property is "category" and room name is stored as "roomName"
-      // For normal devices, the property is "deviceCategory" and the room name is inside device.room.roomName
       const aggregated = existingDevices
         .filter((device: any) => {
-          if (formData.category === 'Solar Panel') {
-            return (
-              device.category === formData.category &&
-              device.roomName === formData.roomName
-            );
-          } else {
-            return (
-              device.deviceCategory === formData.category &&
-              device.room &&
-              device.room.roomName === formData.roomName
-            );
-          }
+          return (
+            device.deviceCategory === formData.category &&
+            device.room &&
+            device.room.roomName === formData.roomName
+          );
         })
         .reduce((sum: number, device: any) => {
           const qty = Number(device.quantity || device.numberOfDevices || 1);
           return sum + qty;
         }, 0);
-
-      // Only update the field if it is empty (or blank)
       if (!formData.numberOfDevices || formData.numberOfDevices.trim() === '') {
         setFormData((prev) => ({ ...prev, numberOfDevices: aggregated.toString() }));
       }
@@ -414,20 +409,17 @@ const DeviceForm: React.FC = () => {
     setFormData({ ...formData, [field]: value });
   };
 
-  // New Cancel handler: Navigates back to management screen.
   const handleCancel = () => {
     navigate('/management');
   };
- const validateUsageTimes = (): boolean => {
+
+  const validateUsageTimes = (): boolean => {
     if (formData.usageTimes) {
       for (let i = 0; i < formData.usageTimes.length; i++) {
         const { start, end } = formData.usageTimes[i];
-        // Using dayjs methods: if start is NOT before end then it's an error.
         if (!start || !end || !start.isBefore(end)) {
           const dayLabel = (formData.weekStart || dayjs()).add(i, 'day').format('ddd, MMM D');
-          setErrorMessage(
-            `For ${dayLabel}: Start time must be before end time (within the same day).`
-          );
+          setErrorMessage(`For ${dayLabel}: Start time must be before end time (within the same day).`);
           setOpenError(true);
           return false;
         }
@@ -435,7 +427,7 @@ const DeviceForm: React.FC = () => {
     }
     return true;
   };
-  // ---------------- Validation ----------------
+
   const validateSolarFields = (): boolean => {
     if (!manualEntry) {
       const missingFields: string[] = [];
@@ -460,26 +452,18 @@ const DeviceForm: React.FC = () => {
       const customData = formData.customSolarPanelData;
       if (!customData) {
         console.error('All manual fields are missing.');
-        setErrorMessage(
-          'Please fill out all required fields for manual solar panel entry.'
-        );
+        setErrorMessage('Please fill out all required fields for manual solar panel entry.');
         setOpenError(true);
         return false;
       }
-      if (!customData.location.name.trim())
-        missingManualFields.push('Location Name');
-      if (customData.location.latitude == null)
-        missingManualFields.push('Latitude');
-      if (customData.location.longitude == null)
-        missingManualFields.push('Longitude');
-      if (customData.location.altitude == null)
-        missingManualFields.push('Altitude');
-      if (!customData.location.timezone.trim())
-        missingManualFields.push('Timezone');
+      if (!customData.location.name.trim()) missingManualFields.push('Location Name');
+      if (customData.location.latitude == null) missingManualFields.push('Latitude');
+      if (customData.location.longitude == null) missingManualFields.push('Longitude');
+      if (customData.location.altitude == null) missingManualFields.push('Altitude');
+      if (!customData.location.timezone.trim()) missingManualFields.push('Timezone');
       if (customData.tilt == null || customData.tilt < 0 || customData.tilt > 359)
         missingManualFields.push('Tilt (must be between 0 and 359)');
-      if (customData.orientation == null)
-        missingManualFields.push('Orientation');
+      if (customData.orientation == null) missingManualFields.push('Orientation');
       const moduleData = customData.custom_solar_module;
       if (!moduleData.name.trim()) missingManualFields.push('Module Name');
       if (moduleData.pdc0 == null) missingManualFields.push('Pdc0');
@@ -493,18 +477,12 @@ const DeviceForm: React.FC = () => {
       if (moduleData.n_s == null) missingManualFields.push('N_s');
       if (moduleData.t_noct == null) missingManualFields.push('T_noct');
       const inverterData = customData.custom_inverter;
-      if (!inverterData.name.trim())
-        missingManualFields.push('Inverter Name');
-      if (inverterData.pdc0 == null)
-        missingManualFields.push('Inverter Pdc0');
-      if (inverterData.paco == null)
-        missingManualFields.push('Paco');
-      if (inverterData.pdco == null)
-        missingManualFields.push('Pdco');
-      if (inverterData.vdco == null)
-        missingManualFields.push('Vdco');
-      if (inverterData.pso == null)
-        missingManualFields.push('Pso');
+      if (!inverterData.name.trim()) missingManualFields.push('Inverter Name');
+      if (inverterData.pdc0 == null) missingManualFields.push('Inverter Pdc0');
+      if (inverterData.paco == null) missingManualFields.push('Paco');
+      if (inverterData.pdco == null) missingManualFields.push('Pdco');
+      if (inverterData.vdco == null) missingManualFields.push('Vdco');
+      if (inverterData.pso == null) missingManualFields.push('Pso');
       if (inverterData.c0 == null) missingManualFields.push('C0');
       if (inverterData.c1 == null) missingManualFields.push('C1');
       if (inverterData.c2 == null) missingManualFields.push('C2');
@@ -513,8 +491,7 @@ const DeviceForm: React.FC = () => {
       if (tempData.u_c == null) missingManualFields.push('U_c');
       if (tempData.u_v == null) missingManualFields.push('U_v');
       if (tempData.eta_m == null) missingManualFields.push('Eta_m');
-      if (tempData.alpha_absorption == null)
-        missingManualFields.push('Alpha Absorption');
+      if (tempData.alpha_absorption == null) missingManualFields.push('Alpha Absorption');
       if (missingManualFields.length > 0) {
         console.error(
           'Missing/invalid required fields for manual solar panel entry:',
@@ -599,9 +576,7 @@ const DeviceForm: React.FC = () => {
         <TextField
           label="Week Start Date"
           type="date"
-          value={
-            formData.weekStart ? formData.weekStart.format('YYYY-MM-DD') : ''
-          }
+          value={formData.weekStart ? formData.weekStart.format('YYYY-MM-DD') : ''}
           onChange={(e) => handleChange('weekStart', dayjs(e.target.value))}
           fullWidth
           sx={{ mb: 2 }}
@@ -611,10 +586,7 @@ const DeviceForm: React.FC = () => {
         </Typography>
         {(formData.weekStart || dayjs()) &&
           formData.usageTimes?.map((time, index) => {
-            const currentDate = (formData.weekStart || dayjs()).add(
-              index,
-              'day'
-            );
+            const currentDate = (formData.weekStart || dayjs()).add(index, 'day');
             return (
               <Box
                 key={index}
@@ -630,9 +602,7 @@ const DeviceForm: React.FC = () => {
                   onChange={(e) => {
                     const newTime = dayjs(e.target.value, 'HH:mm');
                     const updatedUsageTimes = [...(formData.usageTimes || [])];
-                    updatedUsageTimes[index].start = (
-                      formData.weekStart || dayjs()
-                    )
+                    updatedUsageTimes[index].start = (formData.weekStart || dayjs())
                       .add(index, 'day')
                       .hour(newTime.hour())
                       .minute(newTime.minute());
@@ -647,9 +617,7 @@ const DeviceForm: React.FC = () => {
                   onChange={(e) => {
                     const newTime = dayjs(e.target.value, 'HH:mm');
                     const updatedUsageTimes = [...(formData.usageTimes || [])];
-                    updatedUsageTimes[index].end = (
-                      formData.weekStart || dayjs()
-                    )
+                    updatedUsageTimes[index].end = (formData.weekStart || dayjs())
                       .add(index, 'day')
                       .hour(newTime.hour())
                       .minute(newTime.minute());
@@ -693,7 +661,7 @@ const DeviceForm: React.FC = () => {
             </Select>
           </FormControl>
         </Box>
-        {/* Always show Number of Devices for non-solar panels */}
+        {/* For normal devices, show the Number of Devices field */}
         {formData.category !== 'Solar Panel' && (
           <TextField
             label="Number of Devices"
@@ -951,15 +919,7 @@ const DeviceForm: React.FC = () => {
               modulesList={modulesList}
               invertersList={cecInverters}
             />
-            {/* Added Number of Devices field for Solar Panel devices */}
-            <TextField
-              label="Number of Devices"
-              type="number"
-              value={formData.numberOfDevices}
-              onChange={(e) => handleChange('numberOfDevices', e.target.value)}
-              fullWidth
-              sx={{ mb: 2 }}
-            />
+            {/* For Solar Panels, we are reverting to the default behavior – no manual Number of Devices field */}
           </>
         ) : (
           renderGenericForm()
@@ -975,12 +935,7 @@ const DeviceForm: React.FC = () => {
           >
             {isEditing ? 'Update' : 'Save'}
           </Button>
-          <Button
-            variant="outlined"
-            color="primary"
-            fullWidth
-            onClick={handleCancel}
-          >
+          <Button variant="outlined" color="primary" fullWidth onClick={handleCancel}>
             Cancel
           </Button>
         </Box>
