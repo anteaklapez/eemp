@@ -46,6 +46,7 @@ interface FactorBoxProps {
   value: string;
   description: string;
 }
+
 const FactorBox: React.FC<FactorBoxProps> = ({
   icon,
   title,
@@ -55,7 +56,7 @@ const FactorBox: React.FC<FactorBoxProps> = ({
   <Box
     sx={{
       backgroundColor: '#F5F5F5',
-      p: { xs: 1.5, sm: 2 },
+      p: 2,
       borderRadius: '12px',
       display: 'flex',
       flexDirection: 'column',
@@ -74,30 +75,28 @@ const FactorBox: React.FC<FactorBoxProps> = ({
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         {icon}
         <Typography
-          variant="subtitle1"
+          variant="body2"
+          fontWeight="bold"
           sx={{
-            color: '#5A8DEE',
-            fontWeight: 'bold',
-            fontSize: { xs: '14px', sm: '16px' },
+            color: '#6B97A4',
+            fontSize: '16px',
           }}
         >
           {title}
         </Typography>
       </Box>
       <Typography
-        variant="subtitle1"
+        variant="body2"
+        fontWeight="bold"
         sx={{
-          fontWeight: 'bold',
-          fontSize: { xs: '14px', sm: '16px' },
+          fontSize: '16px',
+          color: '#000',
         }}
       >
         {value}
       </Typography>
     </Box>
-    <Typography
-      variant="body2"
-      sx={{ color: 'gray', fontSize: { xs: '12px', sm: '14px' } }}
-    >
+    <Typography variant="caption" color="text.secondary">
       {description}
     </Typography>
   </Box>
@@ -131,7 +130,7 @@ const DeviceDetails: React.FC = () => {
         }
       }
     };
-  
+
     fetchWeatherData();
   }, []);
 
@@ -242,8 +241,6 @@ const DeviceDetails: React.FC = () => {
   };
 
   // 6) Compute the "peak hours on average" across the entire week
-  //    We'll treat each day's usage interval as a start/end in fractional hours (0..24).
-  //    Then we sum & average them to get an overall "average start" and "average end."
   let avgPeakHoursStart = '';
   let avgPeakHoursEnd = '';
 
@@ -257,12 +254,10 @@ const DeviceDetails: React.FC = () => {
       const end = dayjs(ut.end);
       if (!start.isValid() || !end.isValid()) return;
 
-      // Convert to fractional hour of day (0..24+)
       let startHour =
         start.hour() + start.minute() / 60 + start.second() / 3600;
       let endHour = end.hour() + end.minute() / 60 + end.second() / 3600;
 
-      // If end is before start => overnight => endHour += 24
       if (end.isBefore(start)) {
         endHour += 24;
       }
@@ -273,14 +268,12 @@ const DeviceDetails: React.FC = () => {
     });
 
     if (count > 0) {
-      let avgStart = sumStart / count; // e.g. 18.5 => 6:30 PM
+      let avgStart = sumStart / count;
       let avgEnd = sumEnd / count;
       if (avgEnd < avgStart) {
-        avgEnd += 24; // If it crosses midnight
+        avgEnd += 24;
       }
 
-      // Convert fractional hours back to dayjs time
-      // We'll pick an arbitrary reference date, e.g. 1970-01-01
       const referenceDate = dayjs('1970-01-01');
       const avgStartTime = referenceDate.add(avgStart, 'hour');
       const avgEndTime = referenceDate.add(avgEnd, 'hour');
@@ -288,10 +281,7 @@ const DeviceDetails: React.FC = () => {
       avgPeakHoursStart = avgStartTime.format('h:mm A');
       avgPeakHoursEnd = avgEndTime.format('h:mm A');
 
-      // If avgEnd > 24 => we might show e.g. "2:00 AM (next day)" logic
-      // For clarity, you can add a note if it extends past 24 hours
       if (avgEnd >= 24) {
-        // e.g. subtract 24 from display to show the next day's time
         const nextDayEnd = referenceDate.add(avgEnd - 24, 'hour');
         avgPeakHoursEnd = `${nextDayEnd.format('h:mm A')} (next day)`;
       }
@@ -317,7 +307,8 @@ const DeviceDetails: React.FC = () => {
     if (month >= 5 && month <= 7)
       return {
         name: 'Summer',
-        message: 'Long daylight hours; minimal lighting and maximum cooling usage expected.',
+        message:
+          'Long daylight hours; minimal lighting and maximum cooling usage expected.',
       };
     if (month >= 8 && month <= 10)
       return {
@@ -459,7 +450,7 @@ const DeviceDetails: React.FC = () => {
       </Typography>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 3 }}>
         <FactorBox
-          icon={<WbSunnyIcon sx={{ color: 'black' }} />}
+          icon={<WbSunnyIcon sx={{ color: 'black', fontSize: '20px' }} />}
           title="Weather"
           value={`${weatherData?.weather[0]?.main}, ${Math.round(
             weatherData?.temp?.day
@@ -472,14 +463,14 @@ const DeviceDetails: React.FC = () => {
         />
 
         <FactorBox
-          icon={<NatureIcon sx={{ color: 'black' }} />}
+          icon={<NatureIcon sx={{ color: 'black', fontSize: '20px' }} />}
           title="Season"
           value={currentSeason.name}
           description={currentSeason.message}
         />
 
         <FactorBox
-          icon={<AccessTimeIcon sx={{ color: 'black' }} />}
+          icon={<AccessTimeIcon sx={{ color: 'black', fontSize: '20px' }} />}
           title="Peak Hours"
           value={
             avgPeakHoursStart && avgPeakHoursEnd
@@ -534,7 +525,7 @@ const DeviceDetails: React.FC = () => {
       {/* Remove Confirmation Dialog */}
       <Dialog
         open={openRemoveDialog}
-        onClose={() => setOpenRemoveDialog(false)}
+        onClose={handleCloseRemoveDialog}
         PaperProps={{
           sx: { borderRadius: 4, textAlign: 'center', p: 3 },
         }}
@@ -544,8 +535,7 @@ const DeviceDetails: React.FC = () => {
         </DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to remove this device? This action cannot be
-            undone.
+            Are you sure you want to remove this device? This action cannot be undone.
           </Typography>
         </DialogContent>
         <DialogActions sx={{ justifyContent: 'center', gap: 2 }}>

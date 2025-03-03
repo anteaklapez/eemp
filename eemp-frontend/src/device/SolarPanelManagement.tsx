@@ -80,8 +80,8 @@ const SolarPanelManagement: React.FC = () => {
     fetchWeatherData();
   }, []);
 
-   // Load the device from localStorage using id
-   useEffect(() => {
+  // Load the device from localStorage using id
+  useEffect(() => {
     const storedDevices = JSON.parse(localStorage.getItem("devices") || "[]");
     const foundDevice = storedDevices.find(
       (d: DeviceData) => String(d.id) === String(id)
@@ -109,16 +109,9 @@ const SolarPanelManagement: React.FC = () => {
     : new Date();
   const lastUpdatedString = lastUpdatedDate.toLocaleDateString();
 
-  // Placeholder summary values
-  const batteryPercentage = '80%';
-  const kWhStored = '12 kWh';
-  const duration = '6h';
-  const savings = '€35';
-
-  // Chart Data for Week and Month
+  // Chart Data for Week and Month (grid energy removed)
   const weeklyLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const weeklySolarData = [3, 6, 9, 8, 12, 7, 4];
-  const weeklyGridData = [2, 2, 3, 5, 2, 4, 3];
 
   const monthlyLabels = [
     'Jan',
@@ -135,38 +128,26 @@ const SolarPanelManagement: React.FC = () => {
     'Dec',
   ];
   const monthlySolarData = [20, 25, 22, 30, 28, 35, 33, 31, 24, 20, 18, 22];
-  const monthlyGridData = [10, 12, 8, 15, 16, 14, 13, 10, 9, 8, 7, 10];
 
   const chartData = {
     labels: view === 'week' ? weeklyLabels : monthlyLabels,
     datasets: [
       {
-        label: 'Solar energy',
+        label: 'Energy Consumption',
         data: view === 'week' ? weeklySolarData : monthlySolarData,
         borderColor: '#5A8DEE',
         backgroundColor: 'rgba(90,141,238,0.2)',
         tension: 0.4,
         pointRadius: 6,
       },
-      {
-        label: 'Grid energy',
-        data: view === 'week' ? weeklyGridData : monthlyGridData,
-        borderColor: '#CCC',
-        backgroundColor: 'rgba(200,200,200,0.2)',
-        tension: 0.4,
-        pointRadius: 6,
-      },
     ],
   };
 
-  const maxVal = Math.max(
-    ...chartData.datasets[0].data,
-    ...chartData.datasets[1].data
-  );
+  const maxVal = Math.max(...chartData.datasets[0].data);
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    plugins: { legend: { display: true } },
+    plugins: { legend: { display: false } }, // legend hidden
     scales: {
       x: { grid: { display: false } },
       y: {
@@ -201,55 +182,9 @@ const SolarPanelManagement: React.FC = () => {
         Last updated {lastUpdatedString}
       </Typography>
 
-      {/* Summary */}
+      {/* Energy Consumption Section */}
       <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 2 }}>
-        Summary
-      </Typography>
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          mb: 3,
-        }}
-      >
-        <Box>
-          <Typography variant="body2" color="text.secondary">
-            Battery
-          </Typography>
-          <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-            {batteryPercentage}
-          </Typography>
-        </Box>
-        <Box>
-          <Typography variant="body2" color="text.secondary">
-            Stored
-          </Typography>
-          <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-            {kWhStored}
-          </Typography>
-        </Box>
-        <Box>
-          <Typography variant="body2" color="text.secondary">
-            Duration
-          </Typography>
-          <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-            {duration}
-          </Typography>
-        </Box>
-        <Box>
-          <Typography variant="body2" color="text.secondary">
-            Savings
-          </Typography>
-          <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-            {savings}
-          </Typography>
-        </Box>
-      </Box>
-
-      {/* Energy Production */}
-      <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 2 }}>
-        Energy Production
+        Energy Consumption
       </Typography>
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mb: 2 }}>
         <ToggleButton
@@ -352,9 +287,7 @@ const SolarPanelManagement: React.FC = () => {
             sx={{ color: '#000', fontWeight: 'bold', fontSize: '16px' }}
           >
             {weatherData
-              ? `${Math.round(weatherData.temp.day)}°C, ${
-                  weatherData.clouds
-                }% cloud cover`
+              ? `${Math.round(weatherData.temp.day)}°C, ${weatherData.clouds}% cloud cover`
               : 'Loading...'}
           </Typography>
         </Box>
@@ -379,7 +312,7 @@ const SolarPanelManagement: React.FC = () => {
           sx={{
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between', // Space between for left label & right text
+            justifyContent: 'space-between',
             mb: 1,
           }}
         >
@@ -393,7 +326,6 @@ const SolarPanelManagement: React.FC = () => {
               Peak Hours
             </Typography>
           </Box>
-          {/* Make the value black & bold, aligned to the right */}
           <Typography
             variant="body2"
             sx={{ color: '#000', fontWeight: 'bold', fontSize: '16px' }}
@@ -402,9 +334,7 @@ const SolarPanelManagement: React.FC = () => {
           </Typography>
         </Box>
         <Typography variant="caption" color="text.secondary">
-          Peak hours are when your panel generates the most energy. Use
-          high-energy devices during this time to maximize efficiency and
-          savings.
+          Peak hours are when your panel generates the most energy. Use high-energy devices during this time to maximize efficiency.
         </Typography>
       </Box>
 
@@ -462,8 +392,7 @@ const SolarPanelManagement: React.FC = () => {
         </DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to remove this device? This action cannot be
-            undone.
+            Are you sure you want to remove this device? This action cannot be undone.
           </Typography>
         </DialogContent>
         <DialogActions sx={{ justifyContent: 'center', gap: 2 }}>
