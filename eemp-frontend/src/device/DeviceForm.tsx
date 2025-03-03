@@ -413,13 +413,39 @@ const DeviceForm: React.FC = () => {
     navigate('/management');
   };
 
+  /**
+   * Compare only hour/minute to ensure start < end (within the same day).
+   * This ignores the date portion (which can cause errors if dayjs sets different dates).
+   */
   const validateUsageTimes = (): boolean => {
     if (formData.usageTimes) {
       for (let i = 0; i < formData.usageTimes.length; i++) {
         const { start, end } = formData.usageTimes[i];
-        if (!start || !end || !start.isBefore(end)) {
-          const dayLabel = (formData.weekStart || dayjs()).add(i, 'day').format('ddd, MMM D');
-          setErrorMessage(`For ${dayLabel}: Start time must be before end time (within the same day).`);
+
+        // If either is missing, show error
+        if (!start || !end) {
+          setErrorMessage('Please provide both start and end times.');
+          setOpenError(true);
+          return false;
+        }
+
+        // Compare hour/minute only
+        const startHour = start.hour();
+        const startMin = start.minute();
+        const endHour = end.hour();
+        const endMin = end.minute();
+
+        // If start >= end in clock time, error out
+        if (
+          startHour > endHour ||
+          (startHour === endHour && startMin >= endMin)
+        ) {
+          const dayLabel = (formData.weekStart || dayjs())
+            .add(i, 'day')
+            .format('ddd, MMM D');
+          setErrorMessage(
+            `For ${dayLabel}: Start time must be before end time (within the same day).`
+          );
           setOpenError(true);
           return false;
         }
@@ -980,5 +1006,5 @@ const DeviceForm: React.FC = () => {
     </>
   );
 };
-//mybe this works
+
 export default DeviceForm;
