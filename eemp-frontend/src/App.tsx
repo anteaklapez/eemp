@@ -93,11 +93,11 @@ const Navigation: React.FC = () => {
                         transform: getCurrentTab() === 0 ? "scale(1.05)" : "scale(0.9)",
                         transition: "all 0.3s ease-in-out",
                         "& .MuiSvgIcon-root": {
-                            color: "black",
+                            color: getCurrentTab() === 0 ? "white" : "#666666",
                         },
                         "& .MuiBottomNavigationAction-label": {
                             display: getCurrentTab() === 0 ? "block" : "none",
-                            color: "black",
+                            color: getCurrentTab() === 0 ? "white" : "#666666",
                         },
                     }}
                 />
@@ -112,11 +112,11 @@ const Navigation: React.FC = () => {
                         transform: getCurrentTab() === 1 ? "scale(1.05)" : "scale(0.9)",
                         transition: "all 0.3s ease-in-out",
                         "& .MuiSvgIcon-root": {
-                            color: "black",
+                            color: getCurrentTab() === 1 ? "white" : "#666666",
                         },
                         "& .MuiBottomNavigationAction-label": {
                             display: getCurrentTab() === 1 ? "block" : "none",
-                            color: "black",
+                            color: getCurrentTab() === 1 ? "white" : "#666666",
                         },
                     }}
                 />
@@ -131,11 +131,11 @@ const Navigation: React.FC = () => {
                         transform: getCurrentTab() === 2 ? "scale(1.05)" : "scale(0.9)",
                         transition: "all 0.3s ease-in-out",
                         "& .MuiSvgIcon-root": {
-                            color: "black",
+                            color: getCurrentTab() === 2 ? "white" : "#666666",
                         },
                         "& .MuiBottomNavigationAction-label": {
                             display: getCurrentTab() === 2 ? "block" : "none",
-                            color: "black",
+                            color: getCurrentTab() === 2 ? "white" : "#666666",
                         },
                     }}
                 />
