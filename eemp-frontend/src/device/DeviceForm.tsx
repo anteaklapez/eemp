@@ -376,6 +376,39 @@ const DeviceForm: React.FC = () => {
     }
   }, [formData.category]);
 
+  // ------------- New Effect: Aggregate quantity -------------
+  useEffect(() => {
+    if (formData.category && formData.roomName) {
+      const existingDevices = JSON.parse(localStorage.getItem('devices') || '[]');
+      // For solar panels, the device property is "category" and room name is stored as "roomName"
+      // For normal devices, the property is "deviceCategory" and the room name is inside device.room.roomName
+      const aggregated = existingDevices
+        .filter((device: any) => {
+          if (formData.category === 'Solar Panel') {
+            return (
+              device.category === formData.category &&
+              device.roomName === formData.roomName
+            );
+          } else {
+            return (
+              device.deviceCategory === formData.category &&
+              device.room &&
+              device.room.roomName === formData.roomName
+            );
+          }
+        })
+        .reduce((sum: number, device: any) => {
+          const qty = Number(device.quantity || device.numberOfDevices || 1);
+          return sum + qty;
+        }, 0);
+
+      // Only update the field if it is empty (or blank)
+      if (!formData.numberOfDevices || formData.numberOfDevices.trim() === '') {
+        setFormData((prev) => ({ ...prev, numberOfDevices: aggregated.toString() }));
+      }
+    }
+  }, [formData.category, formData.roomName]);
+
   // ---------------- Handlers ----------------
   const handleChange = (field: keyof FormData, value: any) => {
     setFormData({ ...formData, [field]: value });
@@ -385,7 +418,23 @@ const DeviceForm: React.FC = () => {
   const handleCancel = () => {
     navigate('/management');
   };
-
+ const validateUsageTimes = (): boolean => {
+    if (formData.usageTimes) {
+      for (let i = 0; i < formData.usageTimes.length; i++) {
+        const { start, end } = formData.usageTimes[i];
+        // Using dayjs methods: if start is NOT before end then it's an error.
+        if (!start || !end || !start.isBefore(end)) {
+          const dayLabel = (formData.weekStart || dayjs()).add(i, 'day').format('ddd, MMM D');
+          setErrorMessage(
+            `For ${dayLabel}: Start time must be before end time (within the same day).`
+          );
+          setOpenError(true);
+          return false;
+        }
+      }
+    }
+    return true;
+  };
   // ---------------- Validation ----------------
   const validateSolarFields = (): boolean => {
     if (!manualEntry) {
@@ -508,9 +557,12 @@ const DeviceForm: React.FC = () => {
   };
 
   const validateFields = (): boolean => {
-    return formData.category === 'Solar Panel'
-      ? validateSolarFields()
-      : validateNormalFields();
+    const baseValidation =
+      formData.category === 'Solar Panel'
+        ? validateSolarFields()
+        : validateNormalFields();
+    if (!baseValidation) return false;
+    return validateUsageTimes();
   };
 
   // ---------------- Render Functions ----------------
@@ -544,7 +596,6 @@ const DeviceForm: React.FC = () => {
             </Select>
           </FormControl>
         </Box>
-        {/* Removed "Usage Frequency (days)" TextField */}
         <TextField
           label="Week Start Date"
           type="date"
@@ -642,7 +693,8 @@ const DeviceForm: React.FC = () => {
             </Select>
           </FormControl>
         </Box>
-        {formData.category !== 'Solar Panel' && !isEditing && (
+        {/* Always show Number of Devices for non-solar panels */}
+        {formData.category !== 'Solar Panel' && (
           <TextField
             label="Number of Devices"
             type="number"
@@ -696,7 +748,11 @@ const DeviceForm: React.FC = () => {
       };
 
       if (isEditing && editingIndex !== null) {
-        existingDevices[editingIndex] = baseSolarData;
+        const count =
+          formData.numberOfDevices && formData.numberOfDevices.trim() !== ''
+            ? Number(formData.numberOfDevices)
+            : existingDevices[editingIndex]?.quantity || 1;
+        existingDevices[editingIndex] = { ...baseSolarData, quantity: count };
       } else {
         const count = Number(formData.numberOfDevices) || 1;
         const newDevice = {
@@ -736,6 +792,10 @@ const DeviceForm: React.FC = () => {
       };
 
       if (isEditing && editingIndex !== null) {
+        const count =
+          formData.numberOfDevices && formData.numberOfDevices.trim() !== ''
+            ? Number(formData.numberOfDevices)
+            : existingDevices[editingIndex]?.quantity || 1;
         existingDevices[editingIndex] = {
           ...baseNormalData,
           deviceId:
@@ -748,6 +808,7 @@ const DeviceForm: React.FC = () => {
             roomName: formData.roomName,
             roomType: formData.roomType,
           },
+          quantity: count,
         };
       } else {
         const count = Number(formData.numberOfDevices) || 1;
@@ -818,77 +879,88 @@ const DeviceForm: React.FC = () => {
         </FormControl>
 
         {formData.category === 'Solar Panel' ? (
-          <SolarPanelForm
-            formData={formData}
-            handleChange={handleChange}
-            handleCustomChange={(path, val) => {
-              setFormData((prev) => {
-                const defaultSolarPanelData: CustomSolarPanelData = {
-                  location: {
-                    name: '',
-                    latitude: 0,
-                    longitude: 0,
-                    altitude: 0,
-                    timezone: '',
-                  },
-                  tilt: 30,
-                  numberOfStrings: 1,
-                  modulesPerString: 1,
-                  orientation: 180,
-                  custom_solar_module: {
-                    name: '',
-                    pdc0: 0,
-                    gamma_pdc: 0,
-                    bvoco: 0,
-                    bvmpo: 0,
-                    impo: 0,
-                    vmpo: 0,
-                    pmpo: 0,
-                    a_c: 0,
-                    n_s: 0,
-                    t_noct: 0,
-                  },
-                  custom_inverter: {
-                    name: '',
-                    pdc0: 0,
-                    paco: 0,
-                    pdco: 0,
-                    vdco: 0,
-                    pso: 0,
-                    c0: 0,
-                    c1: 0,
-                    c2: 0,
-                    c3: 0,
-                  },
-                  custom_temp_model_params: {
-                    u_c: 0,
-                    u_v: 0,
-                    eta_m: 0,
-                    alpha_absorption: 0,
-                  },
-                };
+          <>
+            <SolarPanelForm
+              formData={formData}
+              handleChange={handleChange}
+              handleCustomChange={(path, val) => {
+                setFormData((prev) => {
+                  const defaultSolarPanelData: CustomSolarPanelData = {
+                    location: {
+                      name: '',
+                      latitude: 0,
+                      longitude: 0,
+                      altitude: 0,
+                      timezone: '',
+                    },
+                    tilt: 30,
+                    numberOfStrings: 1,
+                    modulesPerString: 1,
+                    orientation: 180,
+                    custom_solar_module: {
+                      name: '',
+                      pdc0: 0,
+                      gamma_pdc: 0,
+                      bvoco: 0,
+                      bvmpo: 0,
+                      impo: 0,
+                      vmpo: 0,
+                      pmpo: 0,
+                      a_c: 0,
+                      n_s: 0,
+                      t_noct: 0,
+                    },
+                    custom_inverter: {
+                      name: '',
+                      pdc0: 0,
+                      paco: 0,
+                      pdco: 0,
+                      vdco: 0,
+                      pso: 0,
+                      c0: 0,
+                      c1: 0,
+                      c2: 0,
+                      c3: 0,
+                    },
+                    custom_temp_model_params: {
+                      u_c: 0,
+                      u_v: 0,
+                      eta_m: 0,
+                      alpha_absorption: 0,
+                    },
+                  };
 
-                const currentSolarData = prev.customSolarPanelData
-                  ? { ...defaultSolarPanelData, ...prev.customSolarPanelData }
-                  : defaultSolarPanelData;
+                  const currentSolarData = prev.customSolarPanelData
+                    ? { ...defaultSolarPanelData, ...prev.customSolarPanelData }
+                    : defaultSolarPanelData;
 
-                const segments = path.split('.');
-                let obj: any = currentSolarData;
-                for (let i = 0; i < segments.length - 1; i++) {
-                  if (!obj[segments[i]]) {
-                    obj[segments[i]] = {};
+                  const segments = path.split('.');
+                  let obj: any = currentSolarData;
+                  for (let i = 0; i < segments.length - 1; i++) {
+                    if (!obj[segments[i]]) {
+                      obj[segments[i]] = {};
+                    }
+                    obj = obj[segments[i]];
                   }
-                  obj = obj[segments[i]];
-                }
-                obj[segments[segments.length - 1]] = val;
-                return { ...prev, customSolarPanelData: currentSolarData };
-              });
-            }}
-            manualEntry={manualEntry}
-            setManualEntry={setManualEntry}
-            modulesList={modulesList}
-            invertersList={cecInverters}
-          />
+                  obj[segments[segments.length - 1]] = val;
+                  return { ...prev, customSolarPanelData: currentSolarData };
+                });
+              }}
+              manualEntry={manualEntry}
+              setManualEntry={setManualEntry}
+              modulesList={modulesList}
+              invertersList={cecInverters}
+            />
+            {/* Added Number of Devices field for Solar Panel devices */}
+            <TextField
+              label="Number of Devices"
+              type="number"
+              value={formData.numberOfDevices}
+              onChange={(e) => handleChange('numberOfDevices', e.target.value)}
+              fullWidth
+              sx={{ mb: 2 }}
+            />
+          </>
         ) : (
           renderGenericForm()
         )}
