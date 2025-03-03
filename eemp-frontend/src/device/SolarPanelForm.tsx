@@ -137,13 +137,15 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
         sx={{ mb: 2 }}
       />
       <TextField
-        label="Tilt (°)"
-        type="number"
-        value="30.0"
-        disabled
-        fullWidth
-        sx={{ mb: 2 }}
-      />
+  label="Tilt (°)"
+  type="number"
+  value={formData.tilt}
+  onChange={(e) => handleChange('tilt', parseFloat(e.target.value))}
+  inputProps={{ min: 0, max: 359 }}
+  fullWidth
+  sx={{ mb: 2 }}
+/>
+
       <Button variant="text" onClick={() => setManualEntry(true)}>
         Enter Manual Solar Panel Data
       </Button>
@@ -252,15 +254,18 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
 
         <Typography variant="subtitle1">System Parameters</Typography>
         <TextField
-          label="Tilt (°)"
-          type="number"
-          value={custom.tilt}
-          onChange={(e) =>
-            handleCustomChange('tilt', parseFloat(e.target.value))
-          }
-          fullWidth
-          sx={{ mb: 2 }}
-        />
+  label="Tilt (°)"
+  type="number"
+  value={custom.tilt}
+  onChange={(e) =>
+    handleCustomChange('tilt', parseFloat(e.target.value))
+  }
+  inputProps={{ min: 0, max: 359 }}
+  fullWidth
+  sx={{ mb: 2 }}
+/>
+
+
         <TextField
           label="Rows in parallel"
           type="number"

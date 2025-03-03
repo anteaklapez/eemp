@@ -714,15 +714,36 @@ const DashboardPage = () => {
             border: '1px solid #d0e6f0',
           }}
         >
-          <Typography sx={{ mb: 1, fontFamily: 'inherit' }}>
-            • Turn off lights when not in use
-          </Typography>
-          <Typography sx={{ mb: 1, fontFamily: 'inherit' }}>
-            • Use energy-efficient appliances
-          </Typography>
-          <Typography sx={{ fontFamily: 'inherit' }}>
-            • Adjust thermostat settings seasonally
-          </Typography>
+          {(() => {
+            try {
+              const tipsData = localStorage.getItem('recommendations');
+              const parsedTips = tipsData ? JSON.parse(tipsData) : {};
+              const tips = parsedTips.recommendations || [];
+              if (tips.length > 0) {
+                return tips.map((tip, index) => (
+                  <Typography key={index} sx={{ mb: 1, fontFamily: 'inherit' }}>
+                    • {tip.title}: {tip.suggestion}
+                  </Typography>
+                ));
+              } else {
+                return (
+                  <Typography sx={{ fontFamily: 'inherit' }}>
+                    No energy saving tips available.
+                  </Typography>
+                );
+              }
+            } catch (err) {
+              console.error(
+                'Error fetching energy saving tips from localStorage',
+                err
+              );
+              return (
+                <Typography sx={{ fontFamily: 'inherit' }}>
+                  No energy saving tips available.
+                </Typography>
+              );
+            }
+          })()}
         </Box>
       </Box>
     </Box>

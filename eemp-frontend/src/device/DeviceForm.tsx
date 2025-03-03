@@ -196,7 +196,6 @@ const DeviceForm: React.FC = () => {
   const [manualEntry, setManualEntry] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [openPopup, setOpenPopup] = useState(false);
   const [openError, setOpenError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -394,13 +393,15 @@ const DeviceForm: React.FC = () => {
       if (!formData.name?.trim()) missingFields.push('Name');
       if (!formData.module?.trim()) missingFields.push('Module');
       if (!formData.inverter?.trim()) missingFields.push('Inverter');
+      const tiltValue = Number(formData.tilt);
+      if (isNaN(tiltValue) || tiltValue < 0 || tiltValue > 359) {
+        missingFields.push('Tilt (must be between 0 and 359)');
+      }
       if (missingFields.length > 0) {
-        console.error(
-          'Missing required fields for solar panel:',
-          missingFields.join(', ')
-        );
+        console.error('Missing/invalid required fields for solar panel:', missingFields.join(', '));
         setErrorMessage(
-          'Please fill out all required fields for the solar panel.'
+          'Please fill out all required fields for the solar panel. ' +
+            missingFields.join(', ')
         );
         setOpenError(true);
         return false;
@@ -426,7 +427,8 @@ const DeviceForm: React.FC = () => {
         missingManualFields.push('Altitude');
       if (!customData.location.timezone.trim())
         missingManualFields.push('Timezone');
-      if (customData.tilt == null) missingManualFields.push('Tilt');
+      if (customData.tilt == null || customData.tilt < 0 || customData.tilt > 359)
+        missingManualFields.push('Tilt (must be between 0 and 359)');
       if (customData.orientation == null)
         missingManualFields.push('Orientation');
       const moduleData = customData.custom_solar_module;
@@ -442,12 +444,18 @@ const DeviceForm: React.FC = () => {
       if (moduleData.n_s == null) missingManualFields.push('N_s');
       if (moduleData.t_noct == null) missingManualFields.push('T_noct');
       const inverterData = customData.custom_inverter;
-      if (!inverterData.name.trim()) missingManualFields.push('Inverter Name');
-      if (inverterData.pdc0 == null) missingManualFields.push('Inverter Pdc0');
-      if (inverterData.paco == null) missingManualFields.push('Paco');
-      if (inverterData.pdco == null) missingManualFields.push('Pdco');
-      if (inverterData.vdco == null) missingManualFields.push('Vdco');
-      if (inverterData.pso == null) missingManualFields.push('Pso');
+      if (!inverterData.name.trim())
+        missingManualFields.push('Inverter Name');
+      if (inverterData.pdc0 == null)
+        missingManualFields.push('Inverter Pdc0');
+      if (inverterData.paco == null)
+        missingManualFields.push('Paco');
+      if (inverterData.pdco == null)
+        missingManualFields.push('Pdco');
+      if (inverterData.vdco == null)
+        missingManualFields.push('Vdco');
+      if (inverterData.pso == null)
+        missingManualFields.push('Pso');
       if (inverterData.c0 == null) missingManualFields.push('C0');
       if (inverterData.c1 == null) missingManualFields.push('C1');
       if (inverterData.c2 == null) missingManualFields.push('C2');
@@ -460,11 +468,12 @@ const DeviceForm: React.FC = () => {
         missingManualFields.push('Alpha Absorption');
       if (missingManualFields.length > 0) {
         console.error(
-          'Missing required fields for manual solar panel entry:',
+          'Missing/invalid required fields for manual solar panel entry:',
           missingManualFields.join(', ')
         );
         setErrorMessage(
-          'Please fill out all required fields for manual solar panel entry.'
+          'Please fill out all required fields for manual solar panel entry. ' +
+            missingManualFields.join(', ')
         );
         setOpenError(true);
         return false;
@@ -757,14 +766,7 @@ const DeviceForm: React.FC = () => {
       localStorage.setItem('devices', JSON.stringify(existingDevices));
     }
     localStorage.setItem('shouldRefreshEnergyData', 'true');
-  
-    setOpenPopup(true);
     navigate('/management', { state: { refreshData: true } });
-  };
-
-  const handleClosePopup = () => {
-    setOpenPopup(false);
-    navigate('/management');
   };
 
   const handleCloseError = () => {
@@ -774,12 +776,6 @@ const DeviceForm: React.FC = () => {
   const deviceName =
     formData.name?.trim() ||
     (formData.category === 'Solar Panel' ? 'Solar Panel' : 'Device');
-  const popupTitle = isEditing
-    ? `${deviceName} Updated`
-    : `${deviceName} Added`;
-  const popupMessage = isEditing
-    ? `The ${deviceName.toLowerCase()} has been successfully updated.`
-    : `The ${deviceName.toLowerCase()} has been successfully added to your list.`;
 
   return (
     <>
@@ -917,43 +913,6 @@ const DeviceForm: React.FC = () => {
           </Button>
         </Box>
       </Box>
-
-      <Dialog
-        open={openPopup}
-        onClose={handleClosePopup}
-        PaperProps={{
-          sx: {
-            borderRadius: 4,
-            textAlign: 'center',
-            px: 4,
-            py: 3,
-            maxWidth: '360px',
-          },
-        }}
-      >
-        <DialogTitle sx={{ p: 0, mb: 1, fontSize: '1.25rem' }}>
-          {popupTitle}
-        </DialogTitle>
-        <DialogContent sx={{ p: 0, mb: 2 }}>
-          <Typography variant="body1">{popupMessage}</Typography>
-        </DialogContent>
-        <DialogActions sx={{ p: 0, justifyContent: 'center' }}>
-          <Button
-            variant="contained"
-            onClick={handleClosePopup}
-            sx={{
-              borderRadius: 2,
-              textTransform: 'none',
-              px: 4,
-              backgroundColor: '#000',
-              color: '#fff',
-              '&:hover': { backgroundColor: '#333' },
-            }}
-          >
-            OK
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       <Dialog
         open={openError}
