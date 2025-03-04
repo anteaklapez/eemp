@@ -45,18 +45,45 @@ interface DeviceData {
   // ... any other fields
 }
 
-const SolarPanelManagement: React.FC = () => {
-  const [weatherData, setWeatherData] = useState(null);
+interface ChartDataPoint {
+  name: string;
+  value: number;
+}
 
+const SolarPanelManagement: React.FC = () => {
+  const [weatherData, setWeatherData] = useState<any>(null);
   const { id } = useParams(); // expects route: /solar-panel-management/:id
   const navigate = useNavigate();
   const [view, setView] = useState<'week' | 'month'>('week');
   const [device, setDevice] = useState<DeviceData | null>(null);
   const [openRemoveDialog, setOpenRemoveDialog] = useState(false);
 
+  // New state variables for dynamic production data
+  const [weeklyData, setWeeklyData] = useState<ChartDataPoint[]>([]);
+  const [monthlyData, setMonthlyData] = useState<ChartDataPoint[]>([]);
+
+  // Process daily production data into a weekly view (using weekday names)
+  const processDailyProductionData = (dailyData: any): ChartDataPoint[] => {
+    if (!dailyData || !dailyData.energy_output) return [];
+    return Object.entries(dailyData.energy_output).map(([timestamp, energy]) => ({
+      name: new Date(timestamp).toLocaleDateString([], { weekday: 'short' }),
+      value: parseFloat(Number(energy).toFixed(2)),
+    }));
+  };
+
+  // Process yearly production data into a monthly view (using month abbreviations)
+  const processMonthlyProductionData = (yearlyData: any): ChartDataPoint[] => {
+    if (!yearlyData || !yearlyData.energy_output) return [];
+    return Object.entries(yearlyData.energy_output).map(([month, energy]) => ({
+      name: new Date(month + '-01').toLocaleDateString([], { month: 'short' }),
+      value: parseFloat(Number(energy).toFixed(2)),
+    }));
+  };
+
+  // Fetch weather data
   useEffect(() => {
     const fetchWeatherData = async () => {
-      const userLocation = JSON.parse(localStorage.getItem('userLocation'));
+      const userLocation = JSON.parse(localStorage.getItem('userLocation') || 'null');
       if (userLocation) {
         try {
           const response = await fetch(
@@ -91,6 +118,23 @@ const SolarPanelManagement: React.FC = () => {
     }
   }, [id]);
 
+  // Load production data from localStorage and process it
+  useEffect(() => {
+    const energyData = JSON.parse(localStorage.getItem('energyData') || '{}');
+    if (energyData && energyData.production) {
+      // Process weekly production data from daily production
+      if (energyData.production.daily) {
+        const weekData = processDailyProductionData(energyData.production.daily);
+        setWeeklyData(weekData);
+      }
+      // Process monthly production data from yearly production data
+      if (energyData.production.yearly) {
+        const monthData = processMonthlyProductionData(energyData.production.yearly);
+        setMonthlyData(monthData);
+      }
+    }
+  }, []);
+
   if (!device) {
     return (
       <Box sx={{ p: 3 }}>
@@ -109,32 +153,13 @@ const SolarPanelManagement: React.FC = () => {
     : new Date();
   const lastUpdatedString = lastUpdatedDate.toLocaleDateString();
 
-  // Chart Data for Week and Month (grid energy removed)
-  const weeklyLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const weeklySolarData = [3, 6, 9, 8, 12, 7, 4];
-
-  const monthlyLabels = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-  const monthlySolarData = [20, 25, 22, 30, 28, 35, 33, 31, 24, 20, 18, 22];
-
+  // Build chart data dynamically based on the selected view
   const chartData = {
-    labels: view === 'week' ? weeklyLabels : monthlyLabels,
+    labels: view === 'week' ? weeklyData.map((d) => d.name) : monthlyData.map((d) => d.name),
     datasets: [
       {
-        label: 'Energy Consumption',
-        data: view === 'week' ? weeklySolarData : monthlySolarData,
+        label: 'Energy Production',
+        data: view === 'week' ? weeklyData.map((d) => d.value) : monthlyData.map((d) => d.value),
         borderColor: '#5A8DEE',
         backgroundColor: 'rgba(90,141,238,0.2)',
         tension: 0.4,
@@ -143,7 +168,10 @@ const SolarPanelManagement: React.FC = () => {
     ],
   };
 
-  const maxVal = Math.max(...chartData.datasets[0].data);
+  const maxVal = Math.max(
+    ...(view === 'week' ? weeklyData.map((d) => d.value) : monthlyData.map((d) => d.value)),
+    0
+  );
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -182,9 +210,9 @@ const SolarPanelManagement: React.FC = () => {
         Last updated {lastUpdatedString}
       </Typography>
 
-      {/* Energy Consumption Section */}
+      {/* Energy Production Section */}
       <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 2 }}>
-        Energy Consumption
+        Energy Production
       </Typography>
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mb: 2 }}>
         <ToggleButton

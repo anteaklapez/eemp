@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -15,13 +15,12 @@ import {
   MenuItem,
   Snackbar,
   Alert,
-  CircularProgress,
+  Fade,
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import categoriesData from '../assets/categories.json';
 import { useLocation, useNavigate } from 'react-router-dom';
-
 
 // Define the raw device type saved in localStorage.
 interface RawDevice {
@@ -45,7 +44,6 @@ interface Device {
   id: string | number;
   name: string;
   category: string;
-  // Capture both room name and type.
   room?: { name: string; type: string };
   quantity?: number;
 }
@@ -69,12 +67,115 @@ interface EnergyData {
   };
 }
 
+// LightningOverlay component that overlays the whole page and blocks all interactions.
+const LightningOverlay: React.FC = () => {
+  // Generate an array of random bolt properties on each render.
+  const count = 20;
+  const bolts = Array.from({ length: count }, () => ({
+    left: Math.random() * 100,         // random horizontal position (%)
+    top: Math.random() * 100,          // random vertical position (%)
+    height: 30 + Math.random() * 70,     // bolt height between 30px and 100px
+    delay: Math.random() * 2,          // random delay up to 2 seconds
+  }));
+
+  return (
+    <Box
+      sx={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: 'black',
+        zIndex: 9999,           // High z-index to cover everything
+        pointerEvents: 'auto',  // Intercepts all clicks, blocking interaction beneath
+      }}
+    >
+      {/* Keyframes for the lightning bolt flash */}
+      <style>
+        {`
+          @keyframes boltFlash {
+            0% { opacity: 0; }
+            20% { opacity: 1; }
+            100% { opacity: 0; }
+          }
+        `}
+      </style>
+      {bolts.map((bolt, index) => (
+        <Box
+          key={index}
+          sx={{
+            position: 'absolute',
+            left: `${bolt.left}%`,
+            top: `${bolt.top}%`,
+            width: '2px',
+            height: `${bolt.height}px`,
+            backgroundColor: 'white',
+            animation: `boltFlash 1s infinite`,
+            animationDelay: `${bolt.delay}s`,
+          }}
+        />
+      ))}
+      {/* AnimatedDots component */}
+      <AnimatedDots />
+    </Box>
+  );
+};
+
+// AnimatedDots component replacing the circular spinner.
+const AnimatedDots: React.FC = () => {
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+      }}
+    >
+      <Typography variant="h6" sx={{ color: 'white', fontWeight: 'bold', mr: 1 }}>
+        Calculating
+      </Typography>
+      <Box sx={{ display: 'flex' }}>
+        <Box className="dot" sx={{ width: 8, height: 8, backgroundColor: 'white', borderRadius: '50%', mx: 0.5 }} />
+        <Box className="dot" sx={{ width: 8, height: 8, backgroundColor: 'white', borderRadius: '50%', mx: 0.5 }} />
+        <Box className="dot" sx={{ width: 8, height: 8, backgroundColor: 'white', borderRadius: '50%', mx: 0.5 }} />
+      </Box>
+      <style>
+        {`
+          @keyframes dotBlink {
+            0%, 80%, 100% { opacity: 0; }
+            40% { opacity: 1; }
+          }
+          .dot {
+            animation: dotBlink 1.4s infinite;
+          }
+          .dot:nth-of-type(1) {
+            animation-delay: 0s;
+          }
+          .dot:nth-of-type(2) {
+            animation-delay: 0.2s;
+          }
+          .dot:nth-of-type(3) {
+            animation-delay: 0.4s;
+          }
+        `}
+      </style>
+    </Box>
+  );
+};
+
 const DeviceManagement: React.FC = () => {
   const location = useLocation();
   const [devices, setDevices] = useState<Device[]>([]);
   const [filterCategory, setFilterCategory] = useState<string>('All');
   const [selectedRoom, setSelectedRoom] = useState<string>('All');
   const [loading, setLoading] = useState<boolean>(false);
+  // Separate loading state for calculation.
+  const [isCalculating, setIsCalculating] = useState<boolean>(false);
   const [notification, setNotification] = useState<{
     show: boolean;
     message: string;
@@ -86,12 +187,11 @@ const DeviceManagement: React.FC = () => {
   });
   const navigate = useNavigate();
 
-  // Base URL for API calls
+  // Base URL for API calls.
   const BASE_URL = 'https://eemp-backend-production.up.railway.app';
 
-  // Load devices from localStorage and map them into a unified structure.
+  // Load devices from localStorage and map them.
   useEffect(() => {
-    // Check if we should refresh data based on navigation state
     if (location.state?.refreshData) {
       const rawDevices = JSON.parse(localStorage.getItem('devices') || '[]');
       if (rawDevices.length > 0) {
@@ -119,234 +219,241 @@ const DeviceManagement: React.FC = () => {
     }
   }, [location.state]);
 
-  // Add this useEffect to load devices when component mounts
-useEffect(() => {
-  const rawDevices: RawDevice[] = JSON.parse(localStorage.getItem("devices") || "[]");
-  const unifiedDevices: any[] = rawDevices.map((device) => ({
-    id: device.id || device.deviceId || Date.now(),
-    name: device.name || device.deviceName || "Unnamed Device",
-    category: device.category || device.deviceCategory || "Unknown",
-    room: device.room && typeof device.room === "object"
-      ? { name: device.room.roomName, type: device.room.roomType || "" }
-      : device.room
-      ? { name: device.room, type: "" }
-      : undefined,
-    quantity: device.quantity || 1,
-  }));
-  setDevices(unifiedDevices);
-}, []);
+  // Load devices on mount.
+  useEffect(() => {
+    const rawDevices: RawDevice[] = JSON.parse(localStorage.getItem('devices') || '[]');
+    const unifiedDevices: Device[] = rawDevices.map((device) => ({
+      id: device.id || device.deviceId || Date.now(),
+      name: device.name || device.deviceName || 'Unnamed Device',
+      category: device.category || device.deviceCategory || 'Unknown',
+      room: device.room
+        ? typeof device.room === 'object'
+          ? { name: device.room.roomName, type: device.room.roomType || '' }
+          : { name: device.room, type: '' }
+        : undefined,
+      quantity: device.quantity || 1,
+    }));
+    setDevices(unifiedDevices);
+  }, []);
 
-
-const fetchAllEnergyData = async (rawDevices: RawDevice[]) => {
-  const userLocation = JSON.parse(localStorage.getItem('userLocation') || '{}');
-
-  // Default location if not set
-  const location = {
-    latitude: userLocation.latitude || 45.815399,
-    longitude: userLocation.longitude || 15.966568,
-    name: userLocation.name || 'Default Location',
-    altitude: userLocation.altitude || 122,
-    timezone: userLocation.timezone || 'Europe/Zagreb',
-    country: userLocation.country || 'Croatia',
-  };
-
-  // Get current date
-  const today = new Date();
-  const startDate = today.toISOString().split('T')[0];
-
-  // Separate devices into solar panels and other devices
-  const solarPanels = rawDevices.filter(device => device.category === "Solar Panel" || device.deviceCategory === "Solar Panel");
-  const otherDevices = rawDevices.filter(device => device.category !== "Solar Panel" && device.deviceCategory !== "Solar Panel");
-
-  // Prepare devices for consumption API request
-  const devicesForConsumption = otherDevices.map((device) => ({
-    deviceId: device.deviceId || device.id,
-    deviceName: device.deviceName || device.name,
-    powerRating: device.powerRating || { value: 10, unit: 'W' },
-    usagePattern: device.usagePattern || {
-      usage_times: [
-        {
-          start: today.toISOString(),
-          end: new Date(today.getTime() + 5 * 60 * 60 * 1000).toISOString(),
-        },
-      ],
-    },
-    energyType: device.energyType || 'AC',
-    standbyPower: device.standbyPower || { value: 0.5, unit: 'W' },
-    deviceCategory: device.deviceCategory || device.category,
-    numberOfDevices: device.quantity || 1,
-    room:
-      typeof device.room === 'object'
-        ? device.room
-        : {
-            roomId: 'default',
-            roomName:
-              typeof device.room === 'string' ? device.room : 'Default Room',
-            roomType: 'Living Room',
-          },
-  }));
-
-  // Consumption request body
-  const consumptionRequestBody = {
-    location,
-    start_date: startDate,
-    devices: devicesForConsumption,
-  };
-
-  // Solar panel data for production (assuming first solar panel for simplicity)
-  const solarPanelData = solarPanels.length > 0 ? {
-    inverter_name: (solarPanels[0] as any).inverter || 'ABB__MICRO_0_3HV_I_OUTD_US_208__208V_',
-    module_name: (solarPanels[0] as any).module || 'Advent_Solar_AS160___2006_',
-    tilt: (solarPanels[0] as any).tilt || 30.0,
-    orientation: (solarPanels[0] as any).orientation || 180.0,
-    capacity: 300, // Assuming default capacity
-    efficiency: 21.5, // Assuming default efficiency
-    installation_year: 2022, // Assuming default installation year
-    number_of_strings: (solarPanels[0] as any).numberOfStrings || 1,
-    modules_per_string: (solarPanels[0] as any).modulesPerString || 1
-  } : null;
-
-  // Production request body
-  const productionRequestBody = solarPanelData ? {
-    location,
-    solar_panel_data: solarPanelData,
-  } : null;
-
-  let energyData: EnergyData = {
-    consumption: { hourly: {}, daily: {} },
-    production: { hourly: {}, daily: {}, yearly: {} }
-  };
-  let recommendations = {};
-
-  // Make API calls based on device types
-  if (otherDevices.length > 0 && solarPanels.length > 0) {
-    // Both consumption and production calls
-    const [
-      hourlyConsumption,
-      dailyConsumption,
-      hourlyProduction,
-      dailyProduction,
-      yearlyProduction,
-      recommendationsData,
-    ] = await Promise.all([
-      fetch(`${BASE_URL}/consumption/hourly`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(consumptionRequestBody),
-      }).then((res) => res.json()),
-      fetch(`${BASE_URL}/consumption/daily`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(consumptionRequestBody),
-      }).then((res) => res.json()),
-      fetch(`${BASE_URL}/production/hourly`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(productionRequestBody),
-      }).then((res) => res.json()),
-      fetch(`${BASE_URL}/production/daily`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(productionRequestBody),
-      }).then((res) => res.json()),
-      fetch(`${BASE_URL}/production/yearly`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(productionRequestBody),
-      }).then((res) => res.json()),
-      fetch(`${BASE_URL}/recommendations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location,
-          solar_panel_data: solarPanelData,
-          devices: devicesForConsumption
-        }),
-      }).then((res) => res.json()),
-    ]);
-
-    energyData = {
-      consumption: { hourly: hourlyConsumption, daily: dailyConsumption },
-      production: { hourly: hourlyProduction, daily: dailyProduction, yearly: yearlyProduction }
+  const fetchAllEnergyData = async (rawDevices: RawDevice[]) => {
+    const userLocation = JSON.parse(localStorage.getItem('userLocation') || '{}');
+    const locationObj = {
+      latitude: userLocation.latitude || 45.815399,
+      longitude: userLocation.longitude || 15.966568,
+      name: userLocation.name || 'Default Location',
+      altitude: userLocation.altitude || 122,
+      timezone: userLocation.timezone || 'Europe/Zagreb',
+      country: userLocation.country || 'Croatia',
     };
-    recommendations = recommendationsData;
-  } else if (otherDevices.length > 0) {
-    // Only consumption call
-    const [
-      hourlyConsumption,
-      dailyConsumption,
-      recommendationsData,
-    ] = await Promise.all([
-      fetch(`${BASE_URL}/consumption/hourly`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(consumptionRequestBody),
-      }).then((res) => res.json()),
-      fetch(`${BASE_URL}/consumption/daily`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(consumptionRequestBody),
-      }).then((res) => res.json()),
-      fetch(`${BASE_URL}/recommendations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location,
-          devices: devicesForConsumption
-        }),
-      }).then((res) => res.json()),
-    ]);
 
-    energyData.consumption = { hourly: hourlyConsumption, daily: dailyConsumption };
-    recommendations = recommendationsData;
-  } else if (solarPanels.length > 0) {
-    // Only production call
-    const [
-      hourlyProduction,
-      dailyProduction,
-      yearlyProduction,
-      recommendationsData,
-    ] = await Promise.all([
-      fetch(`${BASE_URL}/production/hourly`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(productionRequestBody),
-      }).then((res) => res.json()),
-      fetch(`${BASE_URL}/production/daily`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(productionRequestBody),
-      }).then((res) => res.json()),
-      fetch(`${BASE_URL}/production/yearly`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(productionRequestBody),
-      }).then((res) => res.json()),
-      fetch(`${BASE_URL}/recommendations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location,
-          solar_panel_data: solarPanelData,
-        }),
-      }).then((res) => res.json()),
-    ]);
+    const today = new Date();
+    const startDate = today.toISOString().split('T')[0];
 
-    energyData.production = { hourly: hourlyProduction, daily: dailyProduction, yearly: yearlyProduction };
-    recommendations = recommendationsData;
-  }
+    const solarPanels = rawDevices.filter(
+      (device) => device.category === 'Solar Panel' || device.deviceCategory === 'Solar Panel'
+    );
+    const otherDevices = rawDevices.filter(
+      (device) => device.category !== 'Solar Panel' && device.deviceCategory !== 'Solar Panel'
+    );
 
-  // Store energy data and recommendations in localStorage
-  localStorage.setItem('energyData', JSON.stringify(energyData));
-  localStorage.setItem('recommendations', JSON.stringify(recommendations));
-  localStorage.setItem('energyDataLastUpdated', new Date().toISOString());
+    const devicesForConsumption = otherDevices.map((device) => ({
+      deviceId: device.deviceId || device.id,
+      deviceName: device.deviceName || device.name,
+      powerRating: device.powerRating || { value: 10, unit: 'W' },
+      usagePattern: device.usagePattern || {
+        usage_times: [
+          {
+            start: today.toISOString(),
+            end: new Date(today.getTime() + 5 * 60 * 60 * 1000).toISOString(),
+          },
+        ],
+      },
+      energyType: device.energyType || 'AC',
+      standbyPower: device.standbyPower || { value: 0.5, unit: 'W' },
+      deviceCategory: device.deviceCategory || device.category,
+      numberOfDevices: device.quantity || 1,
+      room:
+        typeof device.room === 'object'
+          ? device.room
+          : {
+              roomId: 'default',
+              roomName: typeof device.room === 'string' ? device.room : 'Default Room',
+              roomType: 'Living Room',
+            },
+    }));
 
-  return { energyData, recommendations };
-};
+    const solarPanelData = solarPanels.length > 0
+      ? {
+          inverter_name:
+            (solarPanels[0] as any).inverter ||
+            'ABB__MICRO_0_3HV_I_OUTD_US_208__208V_',
+          module_name:
+            (solarPanels[0] as any).module || 'Advent_Solar_AS160___2006_',
+          tilt: (solarPanels[0] as any).tilt || 30.0,
+          orientation: (solarPanels[0] as any).orientation || 180.0,
+          capacity: 300,
+          efficiency: 21.5,
+          installation_year: 2022,
+          number_of_strings: (solarPanels[0] as any).numberOfStrings || 1,
+          modules_per_string: (solarPanels[0] as any).modulesPerString || 1,
+        }
+      : null;
 
+    const productionRequestBody = solarPanelData
+      ? { location: locationObj, solar_panel_data: solarPanelData }
+      : null;
+
+    let energyData: EnergyData = {
+      consumption: { hourly: {}, daily: {} },
+      production: { hourly: {}, daily: {}, yearly: {} },
+    };
+    let recommendations = {};
+
+    if (otherDevices.length > 0 && solarPanels.length > 0) {
+      const [
+        hourlyConsumption,
+        dailyConsumption,
+        hourlyProduction,
+        dailyProduction,
+        yearlyProduction,
+        recommendationsData,
+      ] = await Promise.all([
+        fetch(`${BASE_URL}/consumption/hourly`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            location: locationObj,
+            start_date: startDate,
+            devices: devicesForConsumption,
+          }),
+        }).then((res) => res.json()),
+        fetch(`${BASE_URL}/consumption/daily`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            location: locationObj,
+            start_date: startDate,
+            devices: devicesForConsumption,
+          }),
+        }).then((res) => res.json()),
+        fetch(`${BASE_URL}/production/hourly`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(productionRequestBody),
+        }).then((res) => res.json()),
+        fetch(`${BASE_URL}/production/daily`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(productionRequestBody),
+        }).then((res) => res.json()),
+        fetch(`${BASE_URL}/production/yearly`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(productionRequestBody),
+        }).then((res) => res.json()),
+        fetch(`${BASE_URL}/recommendations`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            location: locationObj,
+            solar_panel_data: solarPanelData,
+            devices: devicesForConsumption,
+          }),
+        }).then((res) => res.json()),
+      ]);
+
+      energyData = {
+        consumption: { hourly: hourlyConsumption, daily: dailyConsumption },
+        production: {
+          hourly: hourlyProduction,
+          daily: dailyProduction,
+          yearly: yearlyProduction,
+        },
+      };
+      recommendations = recommendationsData;
+    } else if (otherDevices.length > 0) {
+      const [hourlyConsumption, dailyConsumption, recommendationsData] =
+        await Promise.all([
+          fetch(`${BASE_URL}/consumption/hourly`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              location: locationObj,
+              start_date: startDate,
+              devices: devicesForConsumption,
+            }),
+          }).then((res) => res.json()),
+          fetch(`${BASE_URL}/consumption/daily`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              location: locationObj,
+              start_date: startDate,
+              devices: devicesForConsumption,
+            }),
+          }).then((res) => res.json()),
+          fetch(`${BASE_URL}/recommendations`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              location: locationObj,
+              devices: devicesForConsumption,
+            }),
+          }).then((res) => res.json()),
+        ]);
+
+      energyData.consumption = { hourly: hourlyConsumption, daily: dailyConsumption };
+      recommendations = recommendationsData;
+    } else if (solarPanels.length > 0) {
+      const [
+        hourlyProduction,
+        dailyProduction,
+        yearlyProduction,
+        recommendationsData,
+      ] = await Promise.all([
+        fetch(`${BASE_URL}/production/hourly`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(productionRequestBody),
+        }).then((res) => res.json()),
+        fetch(`${BASE_URL}/production/daily`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(productionRequestBody),
+        }).then((res) => res.json()),
+        fetch(`${BASE_URL}/production/yearly`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(productionRequestBody),
+        }).then((res) => res.json()),
+        fetch(`${BASE_URL}/recommendations`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            location: locationObj,
+            solar_panel_data: solarPanelData,
+          }),
+        }).then((res) => res.json()),
+      ]);
+
+      energyData.production = {
+        hourly: hourlyProduction,
+        daily: dailyProduction,
+        yearly: yearlyProduction,
+      };
+      recommendations = recommendationsData;
+    }
+
+    localStorage.setItem('energyData', JSON.stringify(energyData));
+    localStorage.setItem('recommendations', JSON.stringify(recommendations));
+    localStorage.setItem('energyDataLastUpdated', new Date().toISOString());
+
+    return { energyData, recommendations };
+  };
 
   // Derive unique rooms based on both room name and type.
-  const derivedRooms: DerivedRoom[] = useMemo(() => {
+  const derivedRooms: DerivedRoom[] = (() => {
     const roomMap = new Map<string, DerivedRoom>();
     devices.forEach((device) => {
       if (device.room && device.room.name) {
@@ -361,9 +468,9 @@ const fetchAllEnergyData = async (rawDevices: RawDevice[]) => {
       }
     });
     return Array.from(roomMap.values());
-  }, [devices]);
+  })();
 
-  // Filter devices by category and by room (using the composite key).
+  // Filter devices by category and room.
   const filteredDevices = devices.filter((device) => {
     const categoryMatch =
       filterCategory === 'All' || device.category === filterCategory;
@@ -378,9 +485,7 @@ const fetchAllEnergyData = async (rawDevices: RawDevice[]) => {
   });
 
   const handleEdit = (index: number) => {
-    // Store a flag in localStorage indicating we should refresh data after editing
     localStorage.setItem('shouldRefreshEnergyData', 'true');
-    
     const rawDevices: RawDevice[] = JSON.parse(localStorage.getItem('devices') || '[]');
     const unifiedDevice = devices[index];
     const deviceToEdit = rawDevices.find(
@@ -391,18 +496,17 @@ const fetchAllEnergyData = async (rawDevices: RawDevice[]) => {
     if (deviceToEdit) {
       navigate('/form', { state: { device: deviceToEdit, index } });
     }
-  };  
+  };
 
   const handleDelete = async (index: number) => {
     const updatedDevices = [...devices];
     updatedDevices.splice(index, 1);
     setDevices(updatedDevices);
-    
+
     const rawDevices: RawDevice[] = JSON.parse(localStorage.getItem('devices') || '[]');
     const updatedRawDevices = rawDevices.filter((_, i) => i !== index);
     localStorage.setItem('devices', JSON.stringify(updatedRawDevices));
-  
-    // If all devices are deleted, clear energy data
+
     if (updatedRawDevices.length === 0) {
       localStorage.removeItem('energyData');
       localStorage.removeItem('energyDataLastUpdated');
@@ -412,7 +516,6 @@ const fetchAllEnergyData = async (rawDevices: RawDevice[]) => {
         type: 'success',
       });
     } else {
-      // Otherwise refresh energy data
       setLoading(true);
       try {
         await fetchAllEnergyData(updatedRawDevices);
@@ -432,14 +535,11 @@ const fetchAllEnergyData = async (rawDevices: RawDevice[]) => {
         setLoading(false);
       }
     }
-  };  
+  };
 
-  // Navigate to device details.
   const handleViewDetails = (index: number) => {
     const selectedUnifiedDevice = devices[index];
-    const rawDevices: RawDevice[] = JSON.parse(
-      localStorage.getItem('devices') || '[]'
-    );
+    const rawDevices: RawDevice[] = JSON.parse(localStorage.getItem('devices') || '[]');
     const rawDevice = rawDevices.find(
       (d) =>
         (d.id && d.id === selectedUnifiedDevice.id) ||
@@ -466,23 +566,47 @@ const fetchAllEnergyData = async (rawDevices: RawDevice[]) => {
     return categoryInfo ? categoryInfo.icon : categoriesData.defaultIcon;
   };
 
-  // Handle adding a new device
   const handleAddDevice = () => {
-    // Store a flag in localStorage indicating we should refresh data after adding
     localStorage.setItem('shouldRefreshEnergyData', 'true');
     navigate('/form');
   };
 
-  // Handle notification close
+  const handleCalculate = async () => {
+    const rawDevices: RawDevice[] = JSON.parse(localStorage.getItem('devices') || '[]');
+    if (rawDevices.length === 0) {
+      setNotification({
+        show: true,
+        message: 'No devices available for calculation',
+        type: 'error',
+      });
+      return;
+    }
+    setIsCalculating(true);
+    try {
+      await fetchAllEnergyData(rawDevices);
+      setNotification({
+        show: true,
+        message: 'Calculation completed and energy data refreshed successfully',
+        type: 'success',
+      });
+    } catch (error) {
+      console.error('Error during calculation:', error);
+      setNotification({
+        show: true,
+        message: 'Calculation failed',
+        type: 'error',
+      });
+    } finally {
+      setIsCalculating(false);
+    }
+  };
+
   const handleCloseNotification = () => {
     setNotification({ ...notification, show: false });
   };
 
-  // Refresh energy data manually
   const handleRefreshData = async () => {
-    const rawDevices: RawDevice[] = JSON.parse(
-      localStorage.getItem('devices') || '[]'
-    );
+    const rawDevices: RawDevice[] = JSON.parse(localStorage.getItem('devices') || '[]');
     if (rawDevices.length === 0) {
       setNotification({
         show: true,
@@ -491,7 +615,6 @@ const fetchAllEnergyData = async (rawDevices: RawDevice[]) => {
       });
       return;
     }
-
     setLoading(true);
     try {
       await fetchAllEnergyData(rawDevices);
@@ -515,6 +638,7 @@ const fetchAllEnergyData = async (rawDevices: RawDevice[]) => {
   return (
     <Box
       sx={{
+        position: 'relative',
         p: 3,
         maxWidth: 600,
         margin: '0 auto',
@@ -522,6 +646,13 @@ const fetchAllEnergyData = async (rawDevices: RawDevice[]) => {
         backgroundColor: '#fff',
       }}
     >
+      {/* Full-page overlay with Fade transition that blocks all clicks when calculating */}
+      <Fade in={isCalculating} timeout={500}>
+        <div>
+          <LightningOverlay />
+        </div>
+      </Fade>
+
       {/* Header */}
       <Box sx={{ mb: 3, textAlign: 'left' }}>
         <Typography variant="h6" fontWeight="bold" sx={{ mb: 1 }}>
@@ -570,11 +701,7 @@ const fetchAllEnergyData = async (rawDevices: RawDevice[]) => {
 
       {/* Device List */}
       {filteredDevices.length === 0 ? (
-        <Typography
-          variant="body1"
-          color="text.secondary"
-          sx={{ textAlign: 'center', mt: 2 }}
-        >
+        <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center', mt: 2 }}>
           No devices found.
         </Typography>
       ) : (
@@ -636,11 +763,11 @@ const fetchAllEnergyData = async (rawDevices: RawDevice[]) => {
       )}
 
       {/* Action Buttons */}
-      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6, gap: 2 }}>
         <Button
           variant="contained"
           onClick={handleAddDevice}
-          disabled={loading}
+          disabled={loading || isCalculating}
           sx={{
             textTransform: 'none',
             fontSize: { xs: '12px', sm: '14px' },
@@ -652,14 +779,22 @@ const fetchAllEnergyData = async (rawDevices: RawDevice[]) => {
         >
           Add Device
         </Button>
+        <Button
+          variant="contained"
+          onClick={handleCalculate}
+          disabled={loading || isCalculating}
+          sx={{
+            textTransform: 'none',
+            fontSize: { xs: '12px', sm: '14px' },
+            p: { xs: 1, sm: 1.5 },
+            borderRadius: 2,
+            backgroundColor: '#6B97A4',
+            '&:hover': { backgroundColor: '#5a8292' },
+          }}
+        >
+          Calculate
+        </Button>
       </Box>
-
-      {/* Loading indicator */}
-      {loading && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
-          <CircularProgress size={30} />
-        </Box>
-      )}
 
       {/* Notification */}
       <Snackbar
@@ -668,11 +803,7 @@ const fetchAllEnergyData = async (rawDevices: RawDevice[]) => {
         onClose={handleCloseNotification}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert
-          onClose={handleCloseNotification}
-          severity={notification.type}
-          sx={{ width: '100%' }}
-        >
+        <Alert onClose={handleCloseNotification} severity={notification.type} sx={{ width: '100%' }}>
           {notification.message}
         </Alert>
       </Snackbar>

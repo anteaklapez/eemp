@@ -101,13 +101,13 @@ const DashboardPage = () => {
   const [categoryConsumption, setCategoryConsumption] =
     useState<CategoryConsumption>({});
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [totalConsumption, setTotalConsumption] = useState<number>(0);
   const [totalProduction, setTotalProduction] = useState<number>(0);
 
   useEffect(() => {
     // Load data from localStorage
-    const loadFromLocalStorage = (key, defaultValue) => {
+    const loadFromLocalStorage = (key: string, defaultValue: any) => {
       try {
         const storedData = localStorage.getItem(key);
         if (storedData) {
@@ -149,10 +149,10 @@ const DashboardPage = () => {
               setConsumptionData((prev) => ({ ...prev, week: dailyData }));
 
               // Calculate total consumption
-              const totalConsumption = calculateTotalConsumption(
+              const totalConsumptionVal = calculateTotalConsumption(
                 energyData.consumption.daily
               );
-              setTotalConsumption(totalConsumption);
+              setTotalConsumption(totalConsumptionVal);
             }
           }
 
@@ -181,10 +181,10 @@ const DashboardPage = () => {
 
             // Calculate total production
             if (energyData.production.daily) {
-              const totalProduction = calculateTotalProduction(
+              const totalProductionVal = calculateTotalProduction(
                 energyData.production.daily
               );
-              setTotalProduction(totalProduction);
+              setTotalProduction(totalProductionVal);
             }
           }
 
@@ -206,61 +206,53 @@ const DashboardPage = () => {
   }, []);
 
   // Process hourly consumption data
-  const processHourlyConsumptionData = (hourlyData) => {
+  const processHourlyConsumptionData = (hourlyData: any): ChartDataPoint[] => {
     if (!hourlyData || !hourlyData.energy_output) return [];
 
-    return Object.entries(hourlyData.energy_output).map(
-      ([timestamp, energy]) => ({
-        name: new Date(timestamp).toLocaleTimeString([], {
-          hour: '2-digit',
-          hour12: true,
-        }),
-        value: parseFloat(Number(energy).toFixed(2)),
-      })
-    );
+    return Object.entries(hourlyData.energy_output).map(([timestamp, energy]) => ({
+      name: new Date(timestamp).toLocaleTimeString([], {
+        hour: '2-digit',
+        hour12: true,
+      }),
+      value: parseFloat(Number(energy).toFixed(2)),
+    }));
   };
 
   // Process daily consumption data
-  const processDailyConsumptionData = (dailyData) => {
+  const processDailyConsumptionData = (dailyData: any): ChartDataPoint[] => {
     if (!dailyData || !dailyData.energy_output) return [];
 
-    return Object.entries(dailyData.energy_output).map(
-      ([timestamp, energy]) => ({
-        name: new Date(timestamp).toLocaleDateString([], { weekday: 'short' }),
-        value: parseFloat(Number(energy).toFixed(2)),
-      })
-    );
+    return Object.entries(dailyData.energy_output).map(([timestamp, energy]) => ({
+      name: new Date(timestamp).toLocaleDateString([], { weekday: 'short' }),
+      value: parseFloat(Number(energy).toFixed(2)),
+    }));
   };
 
   // Process hourly production data
-  const processHourlyProductionData = (hourlyData) => {
+  const processHourlyProductionData = (hourlyData: any): ChartDataPoint[] => {
     if (!hourlyData || !hourlyData.energy_output) return [];
 
-    return Object.entries(hourlyData.energy_output).map(
-      ([timestamp, energy]) => ({
-        name: new Date(timestamp).toLocaleTimeString([], {
-          hour: '2-digit',
-          hour12: true,
-        }),
-        value: parseFloat(Number(energy).toFixed(2)),
-      })
-    );
+    return Object.entries(hourlyData.energy_output).map(([timestamp, energy]) => ({
+      name: new Date(timestamp).toLocaleTimeString([], {
+        hour: '2-digit',
+        hour12: true,
+      }),
+      value: parseFloat(Number(energy).toFixed(2)),
+    }));
   };
 
   // Process daily production data
-  const processDailyProductionData = (dailyData) => {
+  const processDailyProductionData = (dailyData: any): ChartDataPoint[] => {
     if (!dailyData || !dailyData.energy_output) return [];
 
-    return Object.entries(dailyData.energy_output).map(
-      ([timestamp, energy]) => ({
-        name: new Date(timestamp).toLocaleDateString([], { weekday: 'short' }),
-        value: parseFloat(Number(energy).toFixed(2)),
-      })
-    );
+    return Object.entries(dailyData.energy_output).map(([timestamp, energy]) => ({
+      name: new Date(timestamp).toLocaleDateString([], { weekday: 'short' }),
+      value: parseFloat(Number(energy).toFixed(2)),
+    }));
   };
 
   // Process yearly production data
-  const processYearlyProductionData = (yearlyData) => {
+  const processYearlyProductionData = (yearlyData: any): ChartDataPoint[] => {
     if (!yearlyData || !yearlyData.energy_output) return [];
 
     return Object.entries(yearlyData.energy_output).map(([month, energy]) => ({
@@ -270,40 +262,43 @@ const DashboardPage = () => {
   };
 
   // Calculate total consumption
-  const calculateTotalConsumption = (dailyData) => {
+  const calculateTotalConsumption = (dailyData: any): number => {
     if (!dailyData || !dailyData.daily_consumption) return 0;
 
     const total = dailyData.daily_consumption.reduce(
-      (sum, item) => sum + item.consumption,
+      (sum: number, item: any) => sum + item.consumption,
       0
     );
     return parseFloat(total.toFixed(2));
   };
 
   // Calculate total production
-  const calculateTotalProduction = (dailyData) => {
+  const calculateTotalProduction = (dailyData: any): number => {
     if (!dailyData || !dailyData.energy_output) return 0;
 
-    const total: any = Object.values(dailyData.energy_output).reduce(
-      (sum: number, value: any) => sum + Number(value),
-      0
-    );
+    // Cast to Record<string, number> so .reduce() sees numeric values
+    const energyOutput = dailyData.energy_output as Record<string, number>;
+    const total = Object.values(energyOutput).reduce((sum, value) => sum + value, 0);
     return parseFloat(total.toFixed(2));
   };
 
   // Calculate consumption by category
-  const calculateCategoryConsumption = (devices) => {
-    const categoryConsumption = {};
+  const calculateCategoryConsumption = (devicesList: Device[]) => {
+    const catConsumption: CategoryConsumption = {};
 
-    devices.forEach((device) => {
-      let category, powerW, quantity, usageTimes;
+    devicesList.forEach((device) => {
+      let category: string;
+      let powerW: number;
+      let quantity: number;
+      let usageTimes: UsageTime[];
 
-      if (device.category === 'Solar Panel') {
+      // Check deviceCategory instead of device.category
+      if (device.deviceCategory === 'Solar Panel') {
         // Handle solar panel (production)
         category = 'Solar Panel';
-        powerW = parseFloat(device.powerRatingValue) || 0;
+        powerW = parseFloat((device as any).powerRatingValue) || 0;
         quantity = device.quantity || 1;
-        usageTimes = device.usageTimes;
+        usageTimes = (device as any).usageTimes || [];
       } else {
         // Handle consumption devices
         category = device.deviceCategory || 'Other';
@@ -312,33 +307,36 @@ const DashboardPage = () => {
         usageTimes = device.usagePattern?.usage_times || [];
       }
 
-      if (!categoryConsumption[category]) {
-        categoryConsumption[category] = 0;
+      if (!catConsumption[category]) {
+        catConsumption[category] = 0;
       }
 
-      const dailyUsageHours = usageTimes.reduce((total, time) => {
+      const dailyUsageHours = usageTimes.reduce((total: number, time: UsageTime) => {
         const start = new Date(time.start);
         const end = new Date(time.end);
         return total + (Number(end) - Number(start)) / (1000 * 60 * 60);
       }, 0);
 
-      const dailyConsumption = (powerW * quantity * dailyUsageHours) / 1000; // Convert to kWh
-      categoryConsumption[category] += dailyConsumption;
+      const dailyConsumption = (powerW * quantity * dailyUsageHours) / 1000; // kWh
+      catConsumption[category] += dailyConsumption;
     });
 
-    return categoryConsumption;
+    return catConsumption;
   };
 
   // Get current data based on mode and timeframe
   const currentData =
     mode === 'consumption'
-      ? consumptionData[timeframe]
-      : productionData[timeframe];
+      ? consumptionData[timeframe as keyof ConsumptionData]
+      : productionData[timeframe as keyof ProductionData];
 
   // Get total kWh based on mode
   const totalKwh = mode === 'consumption' ? totalConsumption : totalProduction;
 
-  const handleModeChange = (event, newValue) => {
+  const handleModeChange = (
+    event: React.MouseEvent<HTMLElement>,
+    newValue: string | null
+  ) => {
     if (newValue) {
       setMode(newValue);
       // If switching from production to consumption and timeframe is year, reset to week
@@ -348,20 +346,23 @@ const DashboardPage = () => {
     }
   };
 
-  const handleTimeframeChange = (event, newValue) => {
+  const handleTimeframeChange = (
+    event: React.MouseEvent<HTMLElement>,
+    newValue: string | null
+  ) => {
     if (newValue) setTimeframe(newValue);
   };
 
   // Chart width based on data length
   const chartWidth = currentData?.length
     ? timeframe === 'day'
-      ? currentData.length * 40
-      : currentData.length * 80
+      ? currentData.length * 40 // 40px per bar for day view
+      : currentData.length * 80 // 80px per bar for week/year
     : 600;
 
   // Toggle button base styles
   const toggleBtnSx = {
-    textTransform: 'none',
+    textTransform: 'none' as const,
     width: 36,
     height: 36,
     borderRadius: '50%',
@@ -397,7 +398,7 @@ const DashboardPage = () => {
     },
   };
 
-  // Timeframe toggle (Day/Week/Year)
+  // Timeframe toggle (D/W/Y) - Y only for production
   const timeframeToggleStyles = {
     backgroundColor: '#F8F8F8',
     border: '1px solid #ddd',
@@ -572,6 +573,10 @@ const DashboardPage = () => {
                   dataKey="name"
                   tickLine={false}
                   axisLine={false}
+                  // For daily data, show every tick horizontally
+                  interval={timeframe === 'day' ? 0 : 'preserveEnd'}
+                  angle={0}
+                  textAnchor="middle"
                   tick={{
                     fontSize: 12,
                     fill: '#666',
@@ -720,7 +725,7 @@ const DashboardPage = () => {
               const parsedTips = tipsData ? JSON.parse(tipsData) : {};
               const tips = parsedTips.recommendations || [];
               if (tips.length > 0) {
-                return tips.map((tip, index) => (
+                return tips.map((tip: any, index: number) => (
                   <Typography key={index} sx={{ mb: 1, fontFamily: 'inherit' }}>
                     • {tip.title}: {tip.suggestion}
                   </Typography>
