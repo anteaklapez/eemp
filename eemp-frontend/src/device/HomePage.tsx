@@ -39,15 +39,22 @@ interface Room {
 }
 
 interface Device {
-  deviceId: string;
-  deviceName: string;
-  powerRating: PowerRating;
-  usagePattern: UsagePattern;
+  deviceId?: string;
+  deviceName?: string;
+  name?: string;
+  panelName?: string;
+  powerRating?: PowerRating;
+  powerRatingValue?: string;
+  powerRatingUnit?: string;
+  usagePattern?: UsagePattern;
+  deviceCategory?: string;
+  category?: string;
   energyType: string;
-  standbyPower: PowerRating;
-  deviceCategory: string;
+  standbyPower?: PowerRating;
   quantity?: number;
-  room: Room;
+  room?: Room;
+  customSolarPanelData?: any;
+  usageTimes?: UsageTime[];
   lastUpdated?: string;
 }
 
@@ -105,6 +112,38 @@ const DashboardPage = () => {
   const [totalConsumption, setTotalConsumption] = useState<number>(0);
   const [totalProduction, setTotalProduction] = useState<number>(0);
 
+  // Helper: calculate consumption from devices (non-solar)
+  const calculateDevicesTotalConsumption = (devicesList: Device[]): number => {
+    return devicesList.reduce((sum, device) => {
+      const isSolar =
+        device.deviceCategory === 'Solar Panel' ||
+        (device.category && device.category === 'Solar Panel');
+      if (isSolar) return sum; // exclude solar panels
+      const usageTimes = device.usagePattern?.usage_times || [];
+      const dailyUsageHours = usageTimes.reduce((total: number, time: UsageTime) => {
+        const start = new Date(time.start);
+        const end = new Date(time.end);
+        return total + (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+      }, 0);
+      // Get power value from either powerRating or powerRatingValue
+      const power =
+        device.powerRating?.value ||
+        (device.powerRatingValue ? Number(device.powerRatingValue) : 0);
+      // Determine unit and calculate consumption accordingly.
+      const unit = device.powerRating?.unit?.toLowerCase() || 'w';
+      let consumption = 0;
+      if (unit === 'w') {
+        consumption = (power * (device.quantity || 1) * dailyUsageHours) / 1000;
+      } else if (unit === 'kwh') {
+        consumption = power * (device.quantity || 1) * dailyUsageHours;
+      } else {
+        // Fallback: assume watts
+        consumption = (power * (device.quantity || 1) * dailyUsageHours) / 1000;
+      }
+      return sum + consumption;
+    }, 0);
+  };
+
   useEffect(() => {
     // Load data from localStorage
     const loadFromLocalStorage = (key: string, defaultValue: any) => {
@@ -123,7 +162,6 @@ const DashboardPage = () => {
     const loadInitialData = () => {
       setLoading(true);
       try {
-        // Load devices, user location, and energy data from localStorage
         const devicesData = loadFromLocalStorage('devices', []);
         const locationData = loadFromLocalStorage('userLocation', null);
         const energyData = loadFromLocalStorage('energyData', null);
@@ -133,7 +171,7 @@ const DashboardPage = () => {
 
         // Process energy data if available
         if (energyData) {
-          // Process consumption data
+          // Consumption data
           if (energyData.consumption) {
             if (energyData.consumption.hourly) {
               const hourlyData = processHourlyConsumptionData(
@@ -141,22 +179,27 @@ const DashboardPage = () => {
               );
               setConsumptionData((prev) => ({ ...prev, day: hourlyData }));
             }
-
             if (energyData.consumption.daily) {
               const dailyData = processDailyConsumptionData(
                 energyData.consumption.daily
               );
               setConsumptionData((prev) => ({ ...prev, week: dailyData }));
 
-              // Calculate total consumption
+              // Calculate total consumption from energyData
               const totalConsumptionVal = calculateTotalConsumption(
                 energyData.consumption.daily
               );
-              setTotalConsumption(totalConsumptionVal);
+              // If totalConsumptionVal is 0, fallback to device consumption calculation.
+              if (totalConsumptionVal === 0) {
+                const devicesConsumption = calculateDevicesTotalConsumption(devicesData);
+                setTotalConsumption(parseFloat(devicesConsumption.toFixed(2)));
+              } else {
+                setTotalConsumption(totalConsumptionVal);
+              }
             }
           }
 
-          // Process production data
+          // Production data
           if (energyData.production) {
             if (energyData.production.hourly) {
               const hourlyData = processHourlyProductionData(
@@ -164,22 +207,18 @@ const DashboardPage = () => {
               );
               setProductionData((prev) => ({ ...prev, day: hourlyData }));
             }
-
             if (energyData.production.daily) {
               const dailyData = processDailyProductionData(
                 energyData.production.daily
               );
               setProductionData((prev) => ({ ...prev, week: dailyData }));
             }
-
             if (energyData.production.yearly) {
               const yearlyData = processYearlyProductionData(
                 energyData.production.yearly
               );
               setProductionData((prev) => ({ ...prev, year: yearlyData }));
             }
-
-            // Calculate total production
             if (energyData.production.daily) {
               const totalProductionVal = calculateTotalProduction(
                 energyData.production.daily
@@ -188,11 +227,15 @@ const DashboardPage = () => {
             }
           }
 
-          // Calculate consumption by category
+          // Consumption by category (using devices)
           if (devicesData.length > 0) {
             const categories = calculateCategoryConsumption(devicesData);
             setCategoryConsumption(categories);
           }
+        } else {
+          // Fallback: if no energyData, calculate consumption from devices
+          const devicesConsumption = calculateDevicesTotalConsumption(devicesData);
+          setTotalConsumption(parseFloat(devicesConsumption.toFixed(2)));
         }
       } catch (err) {
         console.error('Error loading data from localStorage:', err);
@@ -208,7 +251,6 @@ const DashboardPage = () => {
   // Process hourly consumption data
   const processHourlyConsumptionData = (hourlyData: any): ChartDataPoint[] => {
     if (!hourlyData || !hourlyData.energy_output) return [];
-
     return Object.entries(hourlyData.energy_output).map(([timestamp, energy]) => ({
       name: new Date(timestamp).toLocaleTimeString([], {
         hour: '2-digit',
@@ -221,7 +263,6 @@ const DashboardPage = () => {
   // Process daily consumption data
   const processDailyConsumptionData = (dailyData: any): ChartDataPoint[] => {
     if (!dailyData || !dailyData.energy_output) return [];
-
     return Object.entries(dailyData.energy_output).map(([timestamp, energy]) => ({
       name: new Date(timestamp).toLocaleDateString([], { weekday: 'short' }),
       value: parseFloat(Number(energy).toFixed(2)),
@@ -231,7 +272,6 @@ const DashboardPage = () => {
   // Process hourly production data
   const processHourlyProductionData = (hourlyData: any): ChartDataPoint[] => {
     if (!hourlyData || !hourlyData.energy_output) return [];
-
     return Object.entries(hourlyData.energy_output).map(([timestamp, energy]) => ({
       name: new Date(timestamp).toLocaleTimeString([], {
         hour: '2-digit',
@@ -244,7 +284,6 @@ const DashboardPage = () => {
   // Process daily production data
   const processDailyProductionData = (dailyData: any): ChartDataPoint[] => {
     if (!dailyData || !dailyData.energy_output) return [];
-
     return Object.entries(dailyData.energy_output).map(([timestamp, energy]) => ({
       name: new Date(timestamp).toLocaleDateString([], { weekday: 'short' }),
       value: parseFloat(Number(energy).toFixed(2)),
@@ -254,17 +293,15 @@ const DashboardPage = () => {
   // Process yearly production data
   const processYearlyProductionData = (yearlyData: any): ChartDataPoint[] => {
     if (!yearlyData || !yearlyData.energy_output) return [];
-
     return Object.entries(yearlyData.energy_output).map(([month, energy]) => ({
       name: new Date(month + '-01').toLocaleDateString([], { month: 'short' }),
       value: parseFloat(Number(energy).toFixed(2)),
     }));
   };
 
-  // Calculate total consumption
+  // Calculate total consumption from energyData.daily
   const calculateTotalConsumption = (dailyData: any): number => {
     if (!dailyData || !dailyData.daily_consumption) return 0;
-
     const total = dailyData.daily_consumption.reduce(
       (sum: number, item: any) => sum + item.consumption,
       0
@@ -272,35 +309,32 @@ const DashboardPage = () => {
     return parseFloat(total.toFixed(2));
   };
 
-  // Calculate total production
+  // Calculate total production from energyData.daily
   const calculateTotalProduction = (dailyData: any): number => {
     if (!dailyData || !dailyData.energy_output) return 0;
-
-    // Cast to Record<string, number> so .reduce() sees numeric values
     const energyOutput = dailyData.energy_output as Record<string, number>;
     const total = Object.values(energyOutput).reduce((sum, value) => sum + value, 0);
     return parseFloat(total.toFixed(2));
   };
 
-  // Calculate consumption by category
+  // Calculate consumption by category from devices
   const calculateCategoryConsumption = (devicesList: Device[]) => {
     const catConsumption: CategoryConsumption = {};
-
     devicesList.forEach((device) => {
+      const isSolar =
+        device.deviceCategory === 'Solar Panel' ||
+        (device.category && device.category === 'Solar Panel');
       let category: string;
       let powerW: number;
       let quantity: number;
       let usageTimes: UsageTime[];
 
-      // Check deviceCategory instead of device.category
-      if (device.deviceCategory === 'Solar Panel') {
-        // Handle solar panel (production)
+      if (isSolar) {
         category = 'Solar Panel';
-        powerW = parseFloat((device as any).powerRatingValue) || 0;
+        powerW = parseFloat(device.powerRatingValue || '') || 0;
         quantity = device.quantity || 1;
-        usageTimes = (device as any).usageTimes || [];
+        usageTimes = device.usageTimes || device.usagePattern?.usage_times || [];
       } else {
-        // Handle consumption devices
         category = device.deviceCategory || 'Other';
         powerW = device.powerRating?.value || 0;
         quantity = device.quantity || 1;
@@ -314,23 +348,35 @@ const DashboardPage = () => {
       const dailyUsageHours = usageTimes.reduce((total: number, time: UsageTime) => {
         const start = new Date(time.start);
         const end = new Date(time.end);
-        return total + (Number(end) - Number(start)) / (1000 * 60 * 60);
+        return total + (end.getTime() - start.getTime()) / (1000 * 60 * 60);
       }, 0);
 
-      const dailyConsumption = (powerW * quantity * dailyUsageHours) / 1000; // kWh
+      // For non-solar devices, check unit for conversion
+      let dailyConsumption = 0;
+      if (!isSolar) {
+        const unit = device.powerRating?.unit?.toLowerCase() || 'w';
+        if (unit === 'w') {
+          dailyConsumption = (powerW * quantity * dailyUsageHours) / 1000;
+        } else if (unit === 'kwh') {
+          dailyConsumption = powerW * quantity * dailyUsageHours;
+        } else {
+          dailyConsumption = (powerW * quantity * dailyUsageHours) / 1000;
+        }
+      } else {
+        // For solar panels, you might want to compute production differently.
+        dailyConsumption = (powerW * quantity * dailyUsageHours) / 1000;
+      }
       catConsumption[category] += dailyConsumption;
     });
-
     return catConsumption;
   };
 
-  // Get current data based on mode and timeframe
+  // Get current chart data based on mode and timeframe
   const currentData =
     mode === 'consumption'
       ? consumptionData[timeframe as keyof ConsumptionData]
       : productionData[timeframe as keyof ProductionData];
 
-  // Get total kWh based on mode
   const totalKwh = mode === 'consumption' ? totalConsumption : totalProduction;
 
   const handleModeChange = (
@@ -339,7 +385,6 @@ const DashboardPage = () => {
   ) => {
     if (newValue) {
       setMode(newValue);
-      // If switching from production to consumption and timeframe is year, reset to week
       if (newValue === 'consumption' && timeframe === 'year') {
         setTimeframe('week');
       }
@@ -353,14 +398,12 @@ const DashboardPage = () => {
     if (newValue) setTimeframe(newValue);
   };
 
-  // Chart width based on data length
   const chartWidth = currentData?.length
     ? timeframe === 'day'
-      ? currentData.length * 40 // 40px per bar for day view
-      : currentData.length * 80 // 80px per bar for week/year
+      ? currentData.length * 40
+      : currentData.length * 80
     : 600;
 
-  // Toggle button base styles
   const toggleBtnSx = {
     textTransform: 'none' as const,
     width: 36,
@@ -373,7 +416,6 @@ const DashboardPage = () => {
     fontFamily: 'Roboto, sans-serif',
   };
 
-  // Mode toggle (Consumption/Production)
   const modeToggleStyles = {
     backgroundColor: '#F8F8F8',
     border: '1px solid #ddd',
@@ -398,7 +440,6 @@ const DashboardPage = () => {
     },
   };
 
-  // Timeframe toggle (D/W/Y) - Y only for production
   const timeframeToggleStyles = {
     backgroundColor: '#F8F8F8',
     border: '1px solid #ddd',
@@ -467,18 +508,10 @@ const DashboardPage = () => {
     >
       {/* Top (centered) */}
       <Box sx={{ textAlign: 'center', mb: 4 }}>
-        <Typography
-          variant="h6"
-          fontWeight="bold"
-          sx={{ mb: 1, fontFamily: 'inherit' }}
-        >
+        <Typography variant="h6" fontWeight="bold" sx={{ mb: 1, fontFamily: 'inherit' }}>
           Welcome!
         </Typography>
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          sx={{ fontSize: '1rem', fontFamily: 'inherit' }}
-        >
+        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '1rem', fontFamily: 'inherit' }}>
           Check out your energy consumption or production below.
         </Typography>
       </Box>
@@ -486,31 +519,19 @@ const DashboardPage = () => {
       {/* Location info */}
       {userLocation && (
         <Box sx={{ textAlign: 'center', mb: 3 }}>
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{ fontSize: '0.9rem', fontFamily: 'inherit' }}
-          >
+          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.9rem', fontFamily: 'inherit' }}>
             Location:{' '}
             {userLocation.name ||
-              `${userLocation.latitude.toFixed(
-                2
-              )}, ${userLocation.longitude.toFixed(2)}`}
+              `${userLocation.latitude.toFixed(2)}, ${userLocation.longitude.toFixed(2)}`}
           </Typography>
         </Box>
       )}
 
-      {/* Overview (left-aligned) */}
+      {/* Overview */}
       <Box sx={{ textAlign: 'left', mb: 4 }}>
-        <Typography
-          variant="h6"
-          fontWeight="bold"
-          sx={{ mb: 2, fontFamily: 'inherit' }}
-        >
+        <Typography variant="h6" fontWeight="bold" sx={{ mb: 2, fontFamily: 'inherit' }}>
           Overview
         </Typography>
-
-        {/* Consumption vs Production Toggle */}
         <ToggleButtonGroup
           value={mode}
           exclusive
@@ -520,18 +541,11 @@ const DashboardPage = () => {
           <ToggleButton value="consumption">Consumption</ToggleButton>
           <ToggleButton value="production">Production</ToggleButton>
         </ToggleButtonGroup>
-
-        <Typography
-          variant="h6"
-          fontWeight="bold"
-          sx={{ mb: 2, fontFamily: 'inherit' }}
-        >
+        <Typography variant="h6" fontWeight="bold" sx={{ mb: 2, fontFamily: 'inherit' }}>
           {mode === 'consumption'
             ? `Total Consumption: ${totalKwh} kWh`
             : `Total Production: ${totalKwh} kWh`}
         </Typography>
-
-        {/* Timeframe Toggle (D/W/Y) - Y only for production */}
         <ToggleButtonGroup
           value={timeframe}
           exclusive
@@ -545,35 +559,16 @@ const DashboardPage = () => {
       </Box>
 
       {/* Bar Chart Section */}
-      <Box
-        sx={{
-          width: '100%',
-          mb: 4,
-          overflowX: 'auto',
-          overflowY: 'hidden',
-          scrollBehavior: 'smooth',
-        }}
-      >
+      <Box sx={{ width: '100%', mb: 4, overflowX: 'auto', overflowY: 'hidden', scrollBehavior: 'smooth' }}>
         {currentData && currentData.length > 0 ? (
-          <Box
-            sx={{
-              width: chartWidth,
-              height: 200,
-              display: 'flex',
-              mx: chartWidth < 600 ? 'auto' : 0, // center if narrower than container
-            }}
-          >
+          <Box sx={{ width: chartWidth, height: 200, display: 'flex', mx: chartWidth < 600 ? 'auto' : 0 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={currentData}
-                margin={{ top: 5, right: 15, left: 0, bottom: 5 }}
-              >
+              <BarChart data={currentData} margin={{ top: 5, right: 15, left: 0, bottom: 5 }}>
                 <YAxis hide />
                 <XAxis
                   dataKey="name"
                   tickLine={false}
                   axisLine={false}
-                  // For daily data, show every tick horizontally
                   interval={timeframe === 'day' ? 0 : 'preserveEnd'}
                   angle={0}
                   textAnchor="middle"
@@ -608,107 +603,105 @@ const DashboardPage = () => {
       </Box>
 
       {/* Category breakdown (only for consumption) */}
-      {mode === 'consumption' &&
-        Object.keys(categoryConsumption).length > 0 && (
-          <Box sx={{ mb: 4 }}>
-            <Typography
-              variant="h6"
-              fontWeight="bold"
-              sx={{ mb: 2, fontFamily: 'inherit' }}
-            >
-              Consumption by Category
-            </Typography>
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '1rem',
-              }}
-            >
-              {Object.entries(categoryConsumption).map(([category, value]) => (
-                <Box
-                  key={category}
-                  sx={{
-                    p: 2,
-                    backgroundColor: '#f8f8f8',
-                    borderRadius: 2,
-                    border: '1px solid #e0e0e0',
-                    textAlign: 'center',
-                    fontFamily: 'inherit',
-                  }}
-                >
-                  <Typography variant="body2" sx={{ color: '#888', mb: 1 }}>
-                    {category}
-                  </Typography>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                    {value.toFixed(2)} kWh
-                  </Typography>
-                </Box>
-              ))}
-            </Box>
-          </Box>
-        )}
-
-      {/* Devices summary */}
-      <Box sx={{ mb: 4 }}>
-        <Typography
-          variant="h6"
-          fontWeight="bold"
-          sx={{ mb: 2, fontFamily: 'inherit' }}
-        >
-          Device Summary
-        </Typography>
-
-        {devices.length > 0 ? (
-          <Box sx={{ pl: 2 }}>
-            {devices.map((device) => (
+      {mode === 'consumption' && Object.keys(categoryConsumption).length > 0 && (
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ mb: 2, fontFamily: 'inherit' }}>
+            Consumption by Category
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            {Object.entries(categoryConsumption).map(([category, value]) => (
               <Box
-                key={device.deviceId}
+                key={category}
                 sx={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  mb: 1,
-                  p: 1,
-                  borderRadius: 1,
-                  '&:hover': { backgroundColor: '#f5f5f5' },
+                  p: 2,
+                  backgroundColor: '#f8f8f8',
+                  borderRadius: 2,
+                  border: '1px solid #e0e0e0',
+                  textAlign: 'center',
+                  fontFamily: 'inherit',
                 }}
               >
-                <Typography sx={{ fontFamily: 'inherit' }}>
-                  {device.deviceName} ({device.quantity || 1}x)
+                <Typography variant="body2" sx={{ color: '#888', mb: 1 }}>
+                  {category}
                 </Typography>
-                <Typography sx={{ fontFamily: 'inherit', color: '#666' }}>
-                  {device.powerRating
-                    ? `${device.powerRating.value} ${device.powerRating.unit}`
-                    : (device as any).powerRatingValue
-                    ? `${(device as any).powerRatingValue} W`
-                    : 'N/A'}
+                <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                  {value.toFixed(2)} kWh
                 </Typography>
               </Box>
             ))}
           </Box>
+        </Box>
+      )}
+
+      {/* Devices summary */}
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h6" fontWeight="bold" sx={{ mb: 2, fontFamily: 'inherit' }}>
+          Device Summary
+        </Typography>
+        {devices.length > 0 ? (
+          <Box sx={{ pl: 2 }}>
+            {devices.map((device) => {
+              const isSolar =
+                device.deviceCategory === 'Solar Panel' ||
+                (device.category && device.category === 'Solar Panel');
+              const displayName = isSolar
+                ? device.panelName || device.name || 'Unnamed Solar Panel'
+                : device.deviceName || 'Unnamed Device';
+              let displayPower: string;
+              if (isSolar) {
+                const powerValue =
+                  (device.powerRating && device.powerRating.value) ||
+                  Number(device.powerRatingValue) || 0;
+                if (powerValue > 0) {
+                  displayPower =
+                    device.powerRating?.value +
+                    ' ' +
+                    (device.powerRating?.unit || device.powerRatingUnit || '');
+                } else {
+                  displayPower = `${totalProduction} kWh`;
+                }
+              } else {
+                const powerValue =
+                  device.powerRating?.value ||
+                  (device.powerRatingValue ? Number(device.powerRatingValue) : 0);
+                if (powerValue > 0) {
+                  displayPower = device.powerRating
+                    ? `${device.powerRating.value} ${device.powerRating.unit}`
+                    : `${device.powerRatingValue} W`;
+                } else {
+                  displayPower = 'N/A';
+                }
+              }
+              return (
+                <Box
+                  key={device.deviceId || device.name}
+                  sx={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    mb: 1,
+                    p: 1,
+                    borderRadius: 1,
+                    '&:hover': { backgroundColor: '#f5f5f5' },
+                  }}
+                >
+                  <Typography sx={{ fontFamily: 'inherit' }}>
+                    {displayName} ({device.quantity || 1}x)
+                  </Typography>
+                  <Typography sx={{ fontFamily: 'inherit', color: '#666' }}>{displayPower}</Typography>
+                </Box>
+              );
+            })}
+          </Box>
         ) : (
-          <Box
-            sx={{
-              textAlign: 'center',
-              py: 2,
-              backgroundColor: '#f8f8f8',
-              borderRadius: 2,
-            }}
-          >
-            <Typography color="text.secondary">
-              No devices added yet.
-            </Typography>
+          <Box sx={{ textAlign: 'center', py: 2, backgroundColor: '#f8f8f8', borderRadius: 2 }}>
+            <Typography color="text.secondary">No devices added yet.</Typography>
           </Box>
         )}
       </Box>
 
       {/* Energy saving tips */}
       <Box sx={{ mb: 4 }}>
-        <Typography
-          variant="h6"
-          fontWeight="bold"
-          sx={{ mb: 2, fontFamily: 'inherit' }}
-        >
+        <Typography variant="h6" fontWeight="bold" sx={{ mb: 2, fontFamily: 'inherit' }}>
           Energy Saving Tips
         </Typography>
         <Box
@@ -738,10 +731,7 @@ const DashboardPage = () => {
                 );
               }
             } catch (err) {
-              console.error(
-                'Error fetching energy saving tips from localStorage',
-                err
-              );
+              console.error('Error fetching energy saving tips from localStorage', err);
               return (
                 <Typography sx={{ fontFamily: 'inherit' }}>
                   No energy saving tips available.

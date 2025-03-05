@@ -70,6 +70,7 @@ const LandingPage: React.FC = () => {
           sx={{
             fontSize: { xs: "1rem", sm: "1.5rem", md: "2rem" },
             mb: { xs: "1.5rem", sm: "2rem" },
+              color: "white",
           }}
         >
           Input and monitor your household devices, view real-time energy consumption data,
