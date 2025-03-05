@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Box, Typography, Button, Container } from "@mui/material";
 import { styled } from "@mui/material/styles";
 import { useNavigate } from "react-router-dom";
@@ -9,7 +9,7 @@ const EnlargingButton = styled(Button)(({ theme }) => ({
   padding: "10px 20px",
   fontSize: "1rem",
   textTransform: "none",
-  background: "#000", // originally black
+  background: "#000",
   transition: "transform 0.3s ease-in-out",
   "&:hover": {
     transform: "scale(1.1)", // Enlarge the button on hover
@@ -19,45 +19,65 @@ const EnlargingButton = styled(Button)(({ theme }) => ({
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
 
+  // Disable scrolling when this component mounts, re-enable on unmount
+  useEffect(() => {
+    // Disable scrolling
+    document.body.style.overflow = "hidden";
+    document.body.style.overflowX = "hidden";
+    document.body.style.overflowY = "hidden";
+
+    // Re-enable scrolling when this component unmounts
+    return () => {
+      document.body.style.overflow = "hidden";
+      document.body.style.overflowX = "hidden";
+      document.body.style.overflowY = "hidden";
+    };
+  }, []);
+
   return (
     <Box
       sx={{
-        minHeight: "100%", // Full viewport height
-        minWidth: "100%",  // Full viewport width
-        background: "linear-gradient(to bottom, #6B97A4 0%, #28393E 100%)",
+        width: "100vw",        // Full viewport width
+        height: "100vh",       // Full viewport height
         display: "flex",
         flexDirection: "column",
-        justifyContent: "flex-start",
-        alignItems: "center",
-        color: "white",
-        paddingTop: "10vh",
+        justifyContent: "center", // Center vertically
+        alignItems: "center",     // Center horizontally
+        background: "linear-gradient(to bottom, #6B97A4 0%, #28393E 100%)",
       }}
     >
-      <Container>
+      <Container
+        maxWidth="md"
+        sx={{
+          textAlign: { xs: "center", sm: "left" },
+        }}
+      >
         <Typography
           variant="h3"
           gutterBottom
           sx={{
             color: "black",
             fontWeight: "bold",
-            fontSize: "5rem",
-            textAlign: "left",
+            fontSize: { xs: "2.5rem", sm: "3.5rem", md: "4.5rem", lg: "5rem" },
           }}
         >
-          Achieve energy Independence. <br /> Save on costs.
+          Achieve energy Independence.
+          <br /> Save on costs.
         </Typography>
+
         <Typography
           variant="body1"
           sx={{
-            fontSize: "2rem",
-            marginBottom: "2rem",
-            textAlign: "left",
+            fontSize: { xs: "1rem", sm: "1.5rem", md: "2rem" },
+            mb: { xs: "1.5rem", sm: "2rem" },
+              color: "white",
           }}
         >
-          Input and monitor your household devices, view real-time energy consumption data, and receive personalized
-          recommendations to reduce costs and increase efficiency.
+          Input and monitor your household devices, view real-time energy consumption data,
+          and receive personalized recommendations to reduce costs and increase efficiency.
         </Typography>
-        <Box sx={{ textAlign: "left" }}>
+
+        <Box>
           <EnlargingButton
             variant="contained"
             color="primary"
