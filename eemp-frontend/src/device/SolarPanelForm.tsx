@@ -71,6 +71,15 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
   modulesList,
   invertersList,
 }) => {
+  // Helper function to prevent invalid keys on numeric fields.
+  const handlePreventInvalidKeys = (
+    e: React.KeyboardEvent<HTMLInputElement>
+  ) => {
+    if (['e', 'E', '+', '-'].includes(e.key)) {
+      e.preventDefault();
+    }
+  };
+
   // Standard solar panel form using modules and inverters lists
   const renderStandardForm = () => (
     <Box sx={{ mb: 2 }}>
@@ -117,6 +126,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
         type="number"
         value={formData.numberOfStrings || ''}
         onChange={(e) => handleChange('numberOfStrings', e.target.value)}
+        onKeyDown={handlePreventInvalidKeys}
         fullWidth
         sx={{ mb: 2 }}
       />
@@ -125,6 +135,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
         type="number"
         value={formData.modulesPerString || ''}
         onChange={(e) => handleChange('modulesPerString', e.target.value)}
+        onKeyDown={handlePreventInvalidKeys}
         fullWidth
         sx={{ mb: 2 }}
       />
@@ -133,26 +144,29 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
         type="number"
         value={formData.orientation || ''}
         onChange={(e) => handleChange('orientation', e.target.value)}
+        onKeyDown={handlePreventInvalidKeys}
         fullWidth
         sx={{ mb: 2 }}
       />
       <TextField
-  label="Tilt (°)"
-  type="number"
-  value={formData.tilt}
-  onChange={(e) => handleChange('tilt', parseFloat(e.target.value))}
-  inputProps={{ min: 0, max: 359 }}
-  fullWidth
-  sx={{ mb: 2 }}
-/>
-
+        label="Tilt (°)"
+        type="number"
+        value={formData.tilt}
+        onChange={(e) =>
+          handleChange('tilt', parseFloat(e.target.value))
+        }
+        onKeyDown={handlePreventInvalidKeys}
+        inputProps={{ min: 0, max: 359 }}
+        fullWidth
+        sx={{ mb: 2 }}
+      />
       <Button variant="text" onClick={() => setManualEntry(true)}>
         Enter Manual Solar Panel Data
       </Button>
     </Box>
   );
 
-  // Manual (custom) solar panel form with full fields for location, custom module, custom inverter, and temperature model params.
+  // Manual (custom) solar panel form with full fields
   const renderCustomForm = () => {
     const custom = formData.customSolarPanelData || {
       location: {
@@ -219,6 +233,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
           onChange={(e) =>
             handleCustomChange('location.latitude', parseFloat(e.target.value))
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -229,6 +244,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
           onChange={(e) =>
             handleCustomChange('location.longitude', parseFloat(e.target.value))
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -239,6 +255,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
           onChange={(e) =>
             handleCustomChange('location.altitude', parseFloat(e.target.value))
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -254,23 +271,23 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
 
         <Typography variant="subtitle1">System Parameters</Typography>
         <TextField
-  label="Tilt (°)"
-  type="number"
-  value={custom.tilt}
-  onChange={(e) =>
-    handleCustomChange('tilt', parseFloat(e.target.value))
-  }
-  inputProps={{ min: 0, max: 359 }}
-  fullWidth
-  sx={{ mb: 2 }}
-/>
-
-
+          label="Tilt (°)"
+          type="number"
+          value={custom.tilt}
+          onChange={(e) =>
+            handleCustomChange('tilt', parseFloat(e.target.value))
+          }
+          onKeyDown={handlePreventInvalidKeys}
+          inputProps={{ min: 0, max: 359 }}
+          fullWidth
+          sx={{ mb: 2 }}
+        />
         <TextField
           label="Rows in parallel"
           type="number"
           value={custom.numberOfStrings || ''}
           onChange={(e) => handleChange('numberOfStrings', e.target.value)}
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -279,6 +296,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
           type="number"
           value={custom.modulesPerString || ''}
           onChange={(e) => handleChange('modulesPerString', e.target.value)}
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -289,9 +307,11 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
           onChange={(e) =>
             handleCustomChange('orientation', parseFloat(e.target.value))
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
+
         <Typography variant="subtitle1">Custom Solar Module</Typography>
         <TextField
           label="Module Name"
@@ -312,6 +332,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
               parseFloat(e.target.value)
             )
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -325,6 +346,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
               parseFloat(e.target.value)
             )
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -338,6 +360,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
               parseFloat(e.target.value)
             )
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -351,6 +374,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
               parseFloat(e.target.value)
             )
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -364,6 +388,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
               parseFloat(e.target.value)
             )
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -377,6 +402,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
               parseFloat(e.target.value)
             )
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -390,6 +416,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
               parseFloat(e.target.value)
             )
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -398,11 +425,9 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
           type="number"
           value={custom.custom_solar_module.a_c}
           onChange={(e) =>
-            handleCustomChange(
-              'custom_solar_module.a_c',
-              parseFloat(e.target.value)
-            )
+            handleCustomChange('custom_solar_module.a_c', parseFloat(e.target.value))
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -411,11 +436,9 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
           type="number"
           value={custom.custom_solar_module.n_s}
           onChange={(e) =>
-            handleCustomChange(
-              'custom_solar_module.n_s',
-              parseFloat(e.target.value)
-            )
+            handleCustomChange('custom_solar_module.n_s', parseFloat(e.target.value))
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -429,6 +452,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
               parseFloat(e.target.value)
             )
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -453,6 +477,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
               parseFloat(e.target.value)
             )
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -466,6 +491,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
               parseFloat(e.target.value)
             )
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -479,6 +505,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
               parseFloat(e.target.value)
             )
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -492,6 +519,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
               parseFloat(e.target.value)
             )
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -505,6 +533,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
               parseFloat(e.target.value)
             )
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -515,6 +544,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
           onChange={(e) =>
             handleCustomChange('custom_inverter.c0', parseFloat(e.target.value))
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -525,6 +555,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
           onChange={(e) =>
             handleCustomChange('custom_inverter.c1', parseFloat(e.target.value))
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -535,6 +566,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
           onChange={(e) =>
             handleCustomChange('custom_inverter.c2', parseFloat(e.target.value))
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -545,6 +577,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
           onChange={(e) =>
             handleCustomChange('custom_inverter.c3', parseFloat(e.target.value))
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -562,6 +595,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
               parseFloat(e.target.value)
             )
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -575,6 +609,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
               parseFloat(e.target.value)
             )
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -588,6 +623,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
               parseFloat(e.target.value)
             )
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />
@@ -601,6 +637,7 @@ const SolarPanelForm: React.FC<SolarPanelFormProps> = ({
               parseFloat(e.target.value)
             )
           }
+          onKeyDown={handlePreventInvalidKeys}
           fullWidth
           sx={{ mb: 2 }}
         />

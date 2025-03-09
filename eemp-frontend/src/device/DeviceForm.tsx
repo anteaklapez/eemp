@@ -32,7 +32,8 @@ export interface CustomSolarPanelData {
     altitude: number;
     timezone: string;
   };
-  tilt: number;
+  // Tilt is now not defaulted; must be provided between 1 and 359.
+  tilt?: number;
   numberOfStrings: number;
   modulesPerString: number;
   orientation: number;
@@ -141,7 +142,8 @@ const DeviceForm: React.FC = () => {
         altitude: 0,
         timezone: '',
       },
-      tilt: 30,
+      // No default tilt here.
+      tilt: undefined,
       numberOfStrings: 1,
       modulesPerString: 1,
       orientation: 180,
@@ -282,7 +284,7 @@ const DeviceForm: React.FC = () => {
                 altitude: 0,
                 timezone: '',
               },
-              tilt: 30,
+              tilt: undefined,
               numberOfStrings: 1,
               modulesPerString: 1,
               orientation: 180,
@@ -331,7 +333,8 @@ const DeviceForm: React.FC = () => {
                   ...currentSolarData.location,
                   ...parsedLocation,
                 },
-                tilt: currentSolarData.tilt ?? 30,
+                // Do not override tilt
+                tilt: currentSolarData.tilt,
                 orientation: currentSolarData.orientation ?? 180,
                 custom_solar_module: {
                   ...{
@@ -417,7 +420,6 @@ const DeviceForm: React.FC = () => {
 
   const handleWeekStartChange = (newValue: string) => {
     const newWeekStart = dayjs(newValue);
-
     const newUsageTimes = formData.usageTimes?.map((ut, i) => {
       const startTime = newWeekStart
         .add(i, 'day')
@@ -429,7 +431,6 @@ const DeviceForm: React.FC = () => {
         .minute(ut.end.minute());
       return { start: startTime, end: endTime };
     });
-
     setFormData((prev) => ({
       ...prev,
       weekStart: newWeekStart,
@@ -459,15 +460,36 @@ const DeviceForm: React.FC = () => {
     return true;
   };
 
+  // Updated solar panel validation
   const validateSolarFields = (): boolean => {
     if (!manualEntry) {
       const missingFields: string[] = [];
-      if (!formData.name?.trim()) missingFields.push('Name');
+      // Validate name is provided and not longer than 20 characters.
+      if (!formData.name?.trim()) {
+        missingFields.push('Name');
+      } else if (formData.name.trim().length > 20) {
+        missingFields.push('Name (max 20 characters)');
+      }
       if (!formData.module?.trim()) missingFields.push('Module');
       if (!formData.inverter?.trim()) missingFields.push('Inverter');
       const tiltValue = Number(formData.tilt);
-      if (isNaN(tiltValue) || tiltValue < 0 || tiltValue > 359) {
-        missingFields.push('Tilt (must be between 0 and 359)');
+      if (isNaN(tiltValue) || tiltValue < 1 || tiltValue > 359) {
+        missingFields.push('Tilt (must be between 1 and 359)');
+      }
+      // Validate rows in parallel (numberOfStrings)
+      const numberOfStrings = formData.customSolarPanelData?.numberOfStrings;
+      if (numberOfStrings == null || numberOfStrings <= 0 || numberOfStrings > 10000) {
+        missingFields.push('Rows in parallel (must be between 1 and 10000)');
+      }
+      // Validate panels per row (modulesPerString)
+      const modulesPerString = formData.customSolarPanelData?.modulesPerString;
+      if (modulesPerString == null || modulesPerString <= 0 || modulesPerString > 10000) {
+        missingFields.push('Panels per row (must be between 1 and 10000)');
+      }
+      // Validate orientation
+      const orientationValue = Number(formData.customSolarPanelData?.orientation);
+      if (isNaN(orientationValue) || orientationValue < 1 || orientationValue > 359) {
+        missingFields.push('Orientation (must be between 1 and 359)');
       }
       if (missingFields.length > 0) {
         console.error('Missing/invalid required fields for solar panel:', missingFields.join(', '));
@@ -484,14 +506,30 @@ const DeviceForm: React.FC = () => {
         setOpenError(true);
         return false;
       }
+      if (!formData.name?.trim()) {
+        missingManualFields.push('Name');
+      } else if (formData.name.trim().length > 20) {
+        missingManualFields.push('Name (max 20 characters)');
+      }
       if (!customData.location.name.trim()) missingManualFields.push('Location Name');
       if (customData.location.latitude == null) missingManualFields.push('Latitude');
       if (customData.location.longitude == null) missingManualFields.push('Longitude');
       if (customData.location.altitude == null) missingManualFields.push('Altitude');
       if (!customData.location.timezone.trim()) missingManualFields.push('Timezone');
-      if (customData.tilt == null || customData.tilt < 0 || customData.tilt > 359)
-        missingManualFields.push('Tilt (must be between 0 and 359)');
-      if (customData.orientation == null) missingManualFields.push('Orientation');
+      if (customData.tilt == null || customData.tilt < 1 || customData.tilt > 359)
+        missingManualFields.push('Tilt (must be between 1 and 359)');
+      // Validate rows in parallel
+      if (customData.numberOfStrings == null || customData.numberOfStrings <= 0 || customData.numberOfStrings > 10000) {
+        missingManualFields.push('Rows in parallel (must be between 1 and 10000)');
+      }
+      // Validate panels per row
+      if (customData.modulesPerString == null || customData.modulesPerString <= 0 || customData.modulesPerString > 10000) {
+        missingManualFields.push('Panels per row (must be between 1 and 10000)');
+      }
+      // Validate orientation
+      if (customData.orientation == null || customData.orientation < 1 || customData.orientation > 359) {
+        missingManualFields.push('Orientation (must be between 1 and 359)');
+      }
       const moduleData = customData.custom_solar_module;
       if (!moduleData.name.trim()) missingManualFields.push('Module Name');
       if (moduleData.pdc0 == null) missingManualFields.push('Pdc0');
@@ -532,6 +570,7 @@ const DeviceForm: React.FC = () => {
     return true;
   };
 
+  // Updated validateNormalFields for normal devices according to your requirements.
   const validateNormalFields = (): boolean => {
     const requiredFields: (keyof FormData)[] = [
       'name',
@@ -554,6 +593,40 @@ const DeviceForm: React.FC = () => {
       setOpenError(true);
       return false;
     }
+    if (formData.name.trim().length > 20) {
+      setErrorMessage('Device name must be at most 20 characters long.');
+      setOpenError(true);
+      return false;
+    }
+    const numericRegex = /^[0-9]+$/;
+    if (!numericRegex.test(formData.powerRatingValue.trim())) {
+      setErrorMessage('Power rating must be a number without special characters or letters.');
+      setOpenError(true);
+      return false;
+    }
+    if (!numericRegex.test(formData.standbyPowerValue.trim())) {
+      setErrorMessage('Standby power must be a number without special characters or letters.');
+      setOpenError(true);
+      return false;
+    }
+    if (formData.numberOfDevices) {
+      if (!numericRegex.test(formData.numberOfDevices.trim())) {
+        setErrorMessage('Number of devices must be a number without special characters or letters.');
+        setOpenError(true);
+        return false;
+      }
+      const numDevices = Number(formData.numberOfDevices);
+      if (numDevices > 100000) {
+        setErrorMessage('Number of devices cannot exceed 100,000.');
+        setOpenError(true);
+        return false;
+      }
+    }
+    if (formData.roomName.trim().length > 20) {
+      setErrorMessage('Room name must be at most 20 characters long.');
+      setOpenError(true);
+      return false;
+    }
     return true;
   };
 
@@ -568,6 +641,13 @@ const DeviceForm: React.FC = () => {
 
   // ---------------- Render Functions ----------------
   const renderGenericForm = () => {
+    // A helper handler to prevent e/E/+/-
+    const handlePreventInvalidKeys = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (['e', 'E', '+', '-'].includes(e.key)) {
+        e.preventDefault();
+      }
+    };
+
     return (
       <>
         <TextField
@@ -583,6 +663,7 @@ const DeviceForm: React.FC = () => {
             type="number"
             value={formData.powerRatingValue}
             onChange={(e) => handleChange('powerRatingValue', e.target.value)}
+            onKeyDown={handlePreventInvalidKeys}
             fullWidth
           />
           <FormControl sx={{ minWidth: 'fit-content' }}>
@@ -612,15 +693,10 @@ const DeviceForm: React.FC = () => {
           formData.usageTimes?.map((time, index) => {
             const currentDate = (formData.weekStart || dayjs()).add(index, 'day');
             return (
-              <Box
-                key={index}
-                sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}
-              >
+              <Box key={index} sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
                 <Typography sx={{ width: 100 }}>
                   {currentDate.format('ddd, MMM D')}
                 </Typography>
-
-                {/* START TIME */}
                 <TextField
                   label="Start Time"
                   type="time"
@@ -636,8 +712,6 @@ const DeviceForm: React.FC = () => {
                   }}
                   sx={{ mb: 2 }}
                 />
-
-                {/* END TIME */}
                 <TextField
                   label="End Time"
                   type="time"
@@ -674,6 +748,7 @@ const DeviceForm: React.FC = () => {
             type="number"
             value={formData.standbyPowerValue}
             onChange={(e) => handleChange('standbyPowerValue', e.target.value)}
+            onKeyDown={handlePreventInvalidKeys}
             fullWidth
             sx={{ mb: 0 }}
           />
@@ -695,6 +770,7 @@ const DeviceForm: React.FC = () => {
             type="number"
             value={formData.numberOfDevices}
             onChange={(e) => handleChange('numberOfDevices', e.target.value)}
+            onKeyDown={handlePreventInvalidKeys}
             fullWidth
             sx={{ mb: 2 }}
           />
@@ -736,10 +812,7 @@ const DeviceForm: React.FC = () => {
       const baseSolarData = {
         ...formData,
         lastUpdated: new Date().toISOString(),
-        tilt:
-          formData.category === 'Solar Panel' && !manualEntry
-            ? '30.0'
-            : formData.tilt,
+        tilt: formData.tilt,
       };
 
       if (isEditing && editingIndex !== null) {
@@ -840,7 +913,7 @@ const DeviceForm: React.FC = () => {
         noValidate
         autoComplete="off"
         sx={{
-          width: { xs: "90%", sm: 400 }, // Responsive width: 90% on extra-small screens, 400px on small and up
+          width: { xs: "90%", sm: 400 },
           mx: "auto",
           pt: 4,
           pb: 4,
@@ -887,7 +960,7 @@ const DeviceForm: React.FC = () => {
                     altitude: 0,
                     timezone: "",
                   },
-                  tilt: 30,
+                  tilt: undefined,
                   numberOfStrings: 1,
                   modulesPerString: 1,
                   orientation: 180,

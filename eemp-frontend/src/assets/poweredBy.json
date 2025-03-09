@@ -1,0 +1,14 @@
+{
+  "logos": [
+    {
+      "name": "pvlib",
+      "image": "/assets/icons/pvlib_powered_logo_horiz.webp",
+      "link": "https://pvlib-python.readthedocs.io/en/stable/"
+    },
+    {
+      "name": "OpenWeatherMap",
+      "image": "/assets/icons/openweathermap_logo.png",
+      "link": "https://openweathermap.org/"
+    }
+  ]
+}
