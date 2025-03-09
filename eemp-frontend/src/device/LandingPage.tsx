@@ -2,8 +2,8 @@ import React, { useEffect } from "react";
 import { Box, Typography, Button, Container } from "@mui/material";
 import { styled } from "@mui/material/styles";
 import { useNavigate } from "react-router-dom";
+import poweredBy from "../assets/poweredBy.json";
 
-// Create a styled button that scales up on hover
 const EnlargingButton = styled(Button)(({ theme }) => ({
   position: "relative",
   padding: "10px 20px",
@@ -12,37 +12,29 @@ const EnlargingButton = styled(Button)(({ theme }) => ({
   background: "#000",
   transition: "transform 0.3s ease-in-out",
   "&:hover": {
-    transform: "scale(1.1)", // Enlarge the button on hover
+    transform: "scale(1.1)",
   },
 }));
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
 
-  // Disable scrolling when this component mounts, re-enable on unmount
   useEffect(() => {
-    // Disable scrolling
     document.body.style.overflow = "hidden";
-    document.body.style.overflowX = "hidden";
-    document.body.style.overflowY = "hidden";
-
-    // Re-enable scrolling when this component unmounts
     return () => {
       document.body.style.overflow = "hidden";
-      document.body.style.overflowX = "hidden";
-      document.body.style.overflowY = "hidden";
     };
   }, []);
 
   return (
     <Box
       sx={{
-        width: "100vw",        // Full viewport width
-        height: "100vh",       // Full viewport height
+        width: "100vw",
+        height: "100vh",
         display: "flex",
         flexDirection: "column",
-        justifyContent: "center", // Center vertically
-        alignItems: "center",     // Center horizontally
+        justifyContent: "center",
+        alignItems: "center",
         background: "linear-gradient(to bottom, #6B97A4 0%, #28393E 100%)",
       }}
     >
@@ -70,11 +62,12 @@ const LandingPage: React.FC = () => {
           sx={{
             fontSize: { xs: "1rem", sm: "1.5rem", md: "2rem" },
             mb: { xs: "1.5rem", sm: "2rem" },
-              color: "white",
+            color: "white",
           }}
         >
-          Input and monitor your household devices, view real-time energy consumption data,
-          and receive personalized recommendations to reduce costs and increase efficiency.
+          Input and monitor your household devices, view real-time energy
+          consumption data, and receive personalized recommendations to reduce
+          costs and increase efficiency.
         </Typography>
 
         <Box>
@@ -87,6 +80,42 @@ const LandingPage: React.FC = () => {
           </EnlargingButton>
         </Box>
       </Container>
+
+      {/* Responsive "Powered by" section */}
+      <Box
+        sx={{
+          position: "fixed",
+          bottom: "10px",
+          width: { xs: "100%", sm: "auto" },
+          left: { xs: "0", sm: "unset" },
+          right: { xs: "0", sm: "10px" },
+          display: "flex",
+          justifyContent: { xs: "center", sm: "flex-start" },
+          alignItems: "center",
+          gap: "10px",
+          backgroundColor: { xs: "white", sm: "rgba(255,255,255,0.8)" },
+          padding: "5px 10px",
+          borderRadius: { xs: 0, sm: "8px" },
+        }}
+      >
+        <Typography variant="caption" sx={{ color: "black" }}>
+          Powered by
+        </Typography>
+        {poweredBy.logos.map((logo) => (
+          <a
+            key={logo.name}
+            href={logo.link}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <img
+              src={logo.image}
+              alt={logo.name}
+              style={{ height: "30px", cursor: "pointer" }}
+            />
+          </a>
+        ))}
+      </Box>
     </Box>
   );
 };
