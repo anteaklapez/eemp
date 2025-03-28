@@ -16,7 +16,7 @@ class UsageTime(BaseModel):
     end: str
 
     def __str__(self):
-        start_time = self.start.split("T")[1][:5]  # Extract HH:MM
+        start_time = self.start.split("T")[1][:5]
         end_time = self.end.split("T")[1][:5]
         return f"{start_time}-{end_time}"
 

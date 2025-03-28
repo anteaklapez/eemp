@@ -3,22 +3,23 @@ from datetime import datetime
 from typing import List, Optional
 from location_models import LocationData
 from device_models import Device
-
+from weather_models import WeatherData,WeatherDataFull
+from temperature_models import CustomTempModelParams
 
 
 
 class CustomSolarModule(BaseModel):
     name: str
-    pdc0: float     #DC power at reference conditions (in watts)
-    gamma_pdc: float # Temperature coefficient of power (1/°C)
-    bvoco: float    # Open-circuit voltage temperature coefficient (1/°C)
-    bvmpo: float    # Voltage at max power temperature coefficient (1/°C)
-    impo: float     # Current at max power (A)
-    vmpo: float     # Voltage at max power (V)
-    pmpo: float     # Maximum power output (W)
-    a_c: float      # Area of the module (m²)
-    n_s: float      # Number of cells in the module
-    t_noct: float   # Nominal operating cell temperature (°C)
+    pdc0: float
+    gamma_pdc: float
+    bvoco: float
+    bvmpo: float
+    impo: float
+    vmpo: float
+    pmpo: float
+    a_c: float
+    n_s: float
+    t_noct: float
 
     def __hash__(self):
         return hash((
@@ -61,43 +62,14 @@ class CustomInverter(BaseModel):
             self.c3
         ))
 
-class CustomTempModelParams(BaseModel):
-    u_c: float
-    u_v: float
-    eta_m: float
-    alpha_absorption: float
 
-    def __hash__(self):
-        return hash((
-            self.u_c,
-            self.u_v,
-            self.eta_m,
-            self.alpha_absorption
-        ))
 
-class WeatherData(BaseModel):
-    datetime: datetime
-    temperature: float
-    wind_speed: float
-    ghi: float
-    dhi: float
-    dni: float
-
-    def __hash__(self):
-        return hash((
-            self.datetime,
-            self.temperature,
-            self.wind_speed,
-            self.ghi,
-            self.dhi,
-            self.dni
-        ))
 
 class SolarPanelData(BaseModel):
     inverter_name: str | None = None
     module_name: str | None = None
-    tilt: float # tilt in degrees
-    orientation: float # == azimuth
+    tilt: float
+    orientation: float
     number_of_strings: int
     modules_per_string: int
     capacity: float | None = None
@@ -123,25 +95,7 @@ class EnergyCalculationRequest(BaseModel):
     solar_panel_data: Optional[SolarPanelData] = None
     devices: Optional[List[Device]] = None
     location: LocationData
-    weather_data: Optional[List[WeatherData]] = None  # Optional for partial data
-
-class WeatherDataFull(BaseModel):
-    date: int
-    summary: str
-    max_temp: float
-    min_temp: float
-    cloud_cover: int
-    sunlight_hours: float
-    precipitation: str  # Combined probability and amount
-
-    def __str__(self):
-        date_str = datetime.fromtimestamp(self.date).strftime("%a %b %d")
-        return (
-            f"Weather: {date_str} - {self.summary}\n"
-            f"Max: {self.max_temp}°C, Min: {self.min_temp}°C\n"
-            f"Clouds: {self.cloud_cover}%, Sun: {self.sunlight_hours}h\n"
-            f"Precipitation: {self.precipitation}"
-        )
+    weather_data: Optional[List[WeatherData]] = None
 
 
 class PromptRequest(BaseModel):
@@ -151,13 +105,13 @@ class PromptRequest(BaseModel):
     weather_data: Optional[List[WeatherDataFull]] | None = None
 
     def __str__(self):
-        # Format weather data if present
+
         weather_str = "\n".join(str(w) for w in self.weather_data) if self.weather_data else "No weather data currently"
 
-        # Format device list if present
+
         devices_str = "\n".join(f"- {device}" for device in self.devices) if self.devices else "No devices currently"
 
-        # Format solar panel data if present
+
         solar_panel_str = str(self.solar_panel_data) if self.solar_panel_data else "No solar panels currently"
 
         return f"""

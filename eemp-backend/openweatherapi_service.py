@@ -29,7 +29,7 @@ def parse_openweatherapi_response(weather_api_response: dict, timezone_str: str)
         logger.warning("No weather data found in OpenWeatherAPI response.")
         return pd.DataFrame()
 
-    # Process records efficiently
+
     data = [
         {
             'datetime': datetime.fromtimestamp(record['dt'], tz=ZoneInfo("UTC")).astimezone(tz),
@@ -80,7 +80,7 @@ def parse_hourly_response(response: dict, timezone_str: str) -> pd.DataFrame:
             'wind_speed': record['wind_speed'],
             'cloud_cover': record['clouds']
         }
-        for record in records[:48]  # First 24 entries for single day
+        for record in records[:48]
     ]
 
     df = pd.DataFrame(data)

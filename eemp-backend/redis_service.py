@@ -25,8 +25,8 @@ def generate_cache_key(prefix: str, params: dict) -> str:
     Returns:
         str: A unique cache key.
     """
-    key_string = json.dumps(params, sort_keys=True)  # Convert dict to JSON string
-    hash_digest = hashlib.md5(key_string.encode()).hexdigest()  # Create hash
+    key_string = json.dumps(params, sort_keys=True)
+    hash_digest = hashlib.md5(key_string.encode()).hexdigest()
     return f"{prefix}:{hash_digest}"
 
 
