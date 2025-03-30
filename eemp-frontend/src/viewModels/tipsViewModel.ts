@@ -8,16 +8,15 @@ import {
 } from '../models/interfaces/energyInterfaces';
 import { calculateConsumptionByCategory } from '../utils/calculationUtils';
 
-
 export function useTipsViewModel() {
     const [timeframe, setTimeframe] = useState<'weekly' | 'monthly' | 'yearly'>('weekly');
-    const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+    // Updated: recommendations is now a string to match the API output.
+    const [recommendations, setRecommendations] = useState<string>("");
     const [roomsConsumption, setRoomsConsumption] = useState<{ name: string; consumption: number }[]>([]);
     const [efficiencyData, setEfficiencyData] = useState<any>({});
     const [currentEfficiencyData, setCurrentEfficiencyData] = useState<any>({});
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
-
 
     // Base URL for API calls
     const BASE_URL = 'https://eemp-backend-production.up.railway.app';
@@ -53,7 +52,8 @@ export function useTipsViewModel() {
 
     // Process recommendations data
     const processRecommendationsData = useCallback((data: RecommendationsData) => {
-        setRecommendations(data.recommendations || []);
+        // Expecting data.recommendations to be a string from the API response
+        setRecommendations(typeof data.recommendations === 'string' ? data.recommendations : "");
         setEfficiencyData(data.predicted_efficiency || {});
         setCurrentEfficiencyData(data.current_efficiency || {});
     }, []);
@@ -61,8 +61,6 @@ export function useTipsViewModel() {
     // Fetch recommendations from API
     const fetchRecommendationsFromAPI = useCallback(async () => {
         try {
-            // Get devices from repository
-
             // Get location from repository
             const userLocation = locationRepository.getUserLocation() ||
                 locationRepository.getDefaultLocation();
@@ -206,8 +204,6 @@ export function useTipsViewModel() {
                 roomMap.set(key, prevConsumption + dailyConsumption);
             });
 
-            const categoriesConsumption = calculateConsumptionByCategory(devices);
-
             // Convert to array for chart
             const consumptionArray = Array.from(roomMap.entries()).map(
                 ([key, consumption]) => {
@@ -283,7 +279,9 @@ export function useTipsViewModel() {
         const currentData = currentEfficiencyData[timeframe] || {};
 
         return Object.keys(data).map((key) => ({
-            name: timeframe === 'yearly' ? key : new Date(key).toLocaleDateString([], { day: '2-digit', month: 'short' }),
+            name: timeframe === 'yearly'
+                ? key
+                : new Date(key).toLocaleDateString([], { day: '2-digit', month: 'short' }),
             predicted: data[key],
             current: currentData[key] || 0,
         }));
