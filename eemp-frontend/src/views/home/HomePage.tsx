@@ -15,6 +15,7 @@ import {
     Tooltip,
     ResponsiveContainer,
 } from 'recharts';
+import dayjs from 'dayjs';
 import { useEnergyViewModel } from '../../viewModels/energyViewModel';
 import { useLocationViewModel } from '../../viewModels/locationViewModel';
 import { useDeviceViewModel } from '../../viewModels/deviceViewModel';
@@ -22,7 +23,7 @@ import LoadingState from '../components/LoadingState';
 
 /**
  * HomePage Component
- * The main dashboard for the application showing energy stats
+ * The main dashboard for the application showing energy stats.
  */
 const HomePage: React.FC = () => {
     const theme = useTheme();
@@ -328,59 +329,25 @@ const HomePage: React.FC = () => {
                                     <Typography sx={{ fontFamily: 'inherit' }}>
                                         {displayName} ({device.quantity || 1}x)
                                     </Typography>
-                                    <Typography sx={{ fontFamily: 'inherit', color: '#666' }}>{displayPower}</Typography>
+                                    <Typography sx={{ fontFamily: 'inherit', color: '#666' }}>
+                                        {displayPower}
+                                    </Typography>
                                 </Box>
                             );
                         })}
                     </Box>
                 ) : (
-                    <Box sx={{ textAlign: 'center', py: 2, backgroundColor: '#f8f8f8', borderRadius: 2 }}>
+                    <Box
+                        sx={{
+                            textAlign: 'center',
+                            py: 2,
+                            backgroundColor: '#f8f8f8',
+                            borderRadius: 2,
+                        }}
+                    >
                         <Typography color="text.secondary">No devices added yet.</Typography>
                     </Box>
                 )}
-            </Box>
-
-            {/* Energy saving tips */}
-            <Box sx={{ mb: 4 }}>
-                <Typography variant="h6" fontWeight="bold" sx={{ mb: 2, fontFamily: 'inherit' }}>
-                    Energy Saving Tips
-                </Typography>
-                <Box
-                    sx={{
-                        p: 2,
-                        backgroundColor: '#f0f7fa',
-                        borderRadius: 2,
-                        border: '1px solid #d0e6f0',
-                    }}
-                >
-                    {(() => {
-                        try {
-                            const tipsData = localStorage.getItem('recommendations');
-                            const parsedTips = tipsData ? JSON.parse(tipsData) : {};
-                            const tips = parsedTips.recommendations || [];
-                            if (tips.length > 0) {
-                                return tips.map((tip: any, index: number) => (
-                                    <Typography key={index} sx={{ mb: 1, fontFamily: 'inherit' }}>
-                                        • {tip.title}: {tip.suggestion}
-                                    </Typography>
-                                ));
-                            } else {
-                                return (
-                                    <Typography sx={{ fontFamily: 'inherit' }}>
-                                        No energy saving tips available.
-                                    </Typography>
-                                );
-                            }
-                        } catch (err) {
-                            console.error('Error fetching energy saving tips from localStorage', err);
-                            return (
-                                <Typography sx={{ fontFamily: 'inherit' }}>
-                                    No energy saving tips available.
-                                </Typography>
-                            );
-                        }
-                    })()}
-                </Box>
             </Box>
         </Box>
     );
