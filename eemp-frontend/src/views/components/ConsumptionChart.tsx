@@ -2,7 +2,19 @@
 import React from 'react';
 import { Box, Typography } from '@mui/material';
 import { Line } from 'react-chartjs-2';
-import { ChartData } from 'chart.js';
+import { Chart as ChartJS, ChartData, LineElement, PointElement, LineController, CategoryScale, LinearScale, Title, Tooltip, Legend } from 'chart.js';
+
+// ✅ Register Chart.js components
+ChartJS.register(
+    LineElement,
+    PointElement,
+    LineController,
+    CategoryScale,
+    LinearScale,
+    Title,
+    Tooltip,
+    Legend
+);
 
 interface ConsumptionChartProps {
     data: ChartData<'line'>;
@@ -12,11 +24,11 @@ interface ConsumptionChartProps {
 }
 
 const ConsumptionChart: React.FC<ConsumptionChartProps> = ({
-                                                               data,
-                                                               height = 250,
-                                                               maxValue,
-                                                               loading = false,
-                                                           }) => {
+    data,
+    height = 250,
+    maxValue,
+    loading = false,
+}) => {
     return (
         <Box sx={{ height: height, mb: 3 }}>
             {loading ? (
