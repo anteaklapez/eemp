@@ -32,7 +32,6 @@ export interface CustomSolarPanelData {
     altitude: number;
     timezone: string;
   };
-  // Tilt is now not defaulted; must be provided between 1 and 359.
   tilt?: number;
   numberOfStrings: number;
   modulesPerString: number;
@@ -73,7 +72,6 @@ export interface CustomSolarPanelData {
 export interface FormData {
   id?: number | string;
   category: string;
-  // Shared fields (for solar devices)
   name?: string;
   manufacturerModel?: string;
   powerConsumption?: string;
@@ -91,17 +89,14 @@ export interface FormData {
   orientation?: string;
   tilt?: string;
   customSolarPanelData?: CustomSolarPanelData;
-  // Normal device fields (only used if category !== "Solar Panel")
   powerRatingValue?: string;
   powerRatingUnit?: string;
   weekStart?: Dayjs;
   usageTimes?: { start: Dayjs; end: Dayjs }[];
-  // Energy type dropdown ("AC" or "DC"), default "AC"
   energyType?: string;
   standbyPowerValue?: string;
   standbyPowerUnit?: string;
   numberOfDevices?: string;
-  // Room information
   roomName?: string;
   roomType?: string;
   roomId?: string;
@@ -111,6 +106,62 @@ interface LocationState {
   device?: FormData;
   index?: number;
 }
+
+/**
+ * This handler allows only digits and one optional decimal point.
+ * It now safely uses an empty string as fallback if the input value is undefined.
+ * All letters—including "e" or "E"—are blocked.
+ */
+const handleKeyDownForDecimals = (event: React.KeyboardEvent<HTMLInputElement>) => {
+  const allowedKeys = [
+    'Backspace',
+    'Delete',
+    'Tab',
+    'Escape',
+    'ArrowLeft',
+    'ArrowRight',
+    'Home',
+    'End',
+  ];
+  if (allowedKeys.includes(event.key)) return;
+
+  // Safely fallback to an empty string if value is undefined.
+  const input = event.currentTarget.value || "";
+  const isDigit = /^[0-9]$/.test(event.key);
+  if (isDigit) return;
+  if (event.key === '.') {
+    // Allow a decimal point if not already present.
+    if (input.includes('.')) {
+      event.preventDefault();
+    }
+    return;
+  }
+  // Block any other characters.
+  event.preventDefault();
+};
+
+/**
+ * For whole-number fields like Number of Devices, only allow digits.
+ */
+const handleKeyDownWholeNumber = (event: React.KeyboardEvent<HTMLInputElement>) => {
+  const allowedKeys = [
+    'Backspace',
+    'Delete',
+    'Tab',
+    'Escape',
+    'ArrowLeft',
+    'ArrowRight',
+    'Home',
+    'End',
+  ];
+  if (allowedKeys.includes(event.key)) return;
+  if (!/^\d$/.test(event.key)) {
+    event.preventDefault();
+  }
+};
+
+// Regular expression for validating a decimal number (only digits with an optional one decimal point).
+const decimalRegex = /^\d+(\.\d+)?$/;
 
 const DeviceForm: React.FC = () => {
   const theme = useTheme();
@@ -142,7 +193,6 @@ const DeviceForm: React.FC = () => {
         altitude: 0,
         timezone: '',
       },
-      // No default tilt here.
       tilt: undefined,
       numberOfStrings: 1,
       modulesPerString: 1,
@@ -333,7 +383,6 @@ const DeviceForm: React.FC = () => {
                   ...currentSolarData.location,
                   ...parsedLocation,
                 },
-                // Do not override tilt
                 tilt: currentSolarData.tilt,
                 orientation: currentSolarData.orientation ?? 180,
                 custom_solar_module: {
@@ -460,11 +509,10 @@ const DeviceForm: React.FC = () => {
     return true;
   };
 
-  // Updated solar panel validation
+  // Updated solar panel validation remains unchanged.
   const validateSolarFields = (): boolean => {
     if (!manualEntry) {
       const missingFields: string[] = [];
-      // Validate name is provided and not longer than 20 characters.
       if (!formData.name?.trim()) {
         missingFields.push('Name');
       } else if (formData.name.trim().length > 20) {
@@ -476,17 +524,14 @@ const DeviceForm: React.FC = () => {
       if (isNaN(tiltValue) || tiltValue < 1 || tiltValue > 359) {
         missingFields.push('Tilt (must be between 1 and 359)');
       }
-      // Validate rows in parallel (numberOfStrings)
       const numberOfStrings = formData.customSolarPanelData?.numberOfStrings;
       if (numberOfStrings == null || numberOfStrings <= 0 || numberOfStrings > 10000) {
         missingFields.push('Rows in parallel (must be between 1 and 10000)');
       }
-      // Validate panels per row (modulesPerString)
       const modulesPerString = formData.customSolarPanelData?.modulesPerString;
       if (modulesPerString == null || modulesPerString <= 0 || modulesPerString > 10000) {
         missingFields.push('Panels per row (must be between 1 and 10000)');
       }
-      // Validate orientation
       const orientationValue = Number(formData.customSolarPanelData?.orientation);
       if (isNaN(orientationValue) || orientationValue < 1 || orientationValue > 359) {
         missingFields.push('Orientation (must be between 1 and 359)');
@@ -518,15 +563,12 @@ const DeviceForm: React.FC = () => {
       if (!customData.location.timezone.trim()) missingManualFields.push('Timezone');
       if (customData.tilt == null || customData.tilt < 1 || customData.tilt > 359)
         missingManualFields.push('Tilt (must be between 1 and 359)');
-      // Validate rows in parallel
       if (customData.numberOfStrings == null || customData.numberOfStrings <= 0 || customData.numberOfStrings > 10000) {
         missingManualFields.push('Rows in parallel (must be between 1 and 10000)');
       }
-      // Validate panels per row
       if (customData.modulesPerString == null || customData.modulesPerString <= 0 || customData.modulesPerString > 10000) {
         missingManualFields.push('Panels per row (must be between 1 and 10000)');
       }
-      // Validate orientation
       if (customData.orientation == null || customData.orientation < 1 || customData.orientation > 359) {
         missingManualFields.push('Orientation (must be between 1 and 359)');
       }
@@ -570,7 +612,7 @@ const DeviceForm: React.FC = () => {
     return true;
   };
 
-  // Updated validateNormalFields for normal devices according to your requirements.
+  // Updated validateNormalFields for normal devices.
   const validateNormalFields = (): boolean => {
     const requiredFields: (keyof FormData)[] = [
       'name',
@@ -598,20 +640,21 @@ const DeviceForm: React.FC = () => {
       setOpenError(true);
       return false;
     }
-    const numericRegex = /^[0-9]+$/;
-    if (!numericRegex.test(formData.powerRatingValue.trim())) {
-      setErrorMessage('Power rating must be a number without special characters or letters.');
+    // Validate that power rating and standby power are valid decimals (only digits and an optional one decimal point).
+    if (!decimalRegex.test(formData.powerRatingValue.trim())) {
+      setErrorMessage('Power rating must be a valid decimal number.');
       setOpenError(true);
       return false;
     }
-    if (!numericRegex.test(formData.standbyPowerValue.trim())) {
-      setErrorMessage('Standby power must be a number without special characters or letters.');
+    if (!decimalRegex.test(formData.standbyPowerValue.trim())) {
+      setErrorMessage('Standby power must be a valid decimal number.');
       setOpenError(true);
       return false;
     }
     if (formData.numberOfDevices) {
-      if (!numericRegex.test(formData.numberOfDevices.trim())) {
-        setErrorMessage('Number of devices must be a number without special characters or letters.');
+      // numberOfDevices must be a whole number (only digits).
+      if (!/^\d+$/.test(formData.numberOfDevices.trim())) {
+        setErrorMessage('Number of devices must be a whole number.');
         setOpenError(true);
         return false;
       }
@@ -641,13 +684,6 @@ const DeviceForm: React.FC = () => {
 
   // ---------------- Render Functions ----------------
   const renderGenericForm = () => {
-    // A helper handler to prevent e/E/+/-
-    const handlePreventInvalidKeys = (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (['e', 'E', '+', '-'].includes(e.key)) {
-        e.preventDefault();
-      }
-    };
-
     return (
       <>
         <TextField
@@ -660,10 +696,10 @@ const DeviceForm: React.FC = () => {
         <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
           <TextField
             label="Power Rating (Value)"
-            type="number"
+            type="text"
             value={formData.powerRatingValue}
+            onKeyDown={handleKeyDownForDecimals}
             onChange={(e) => handleChange('powerRatingValue', e.target.value)}
-            onKeyDown={handlePreventInvalidKeys}
             fullWidth
           />
           <FormControl sx={{ minWidth: 'fit-content' }}>
@@ -745,10 +781,10 @@ const DeviceForm: React.FC = () => {
         <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
           <TextField
             label="Standby Power (Value)"
-            type="number"
+            type="text"
             value={formData.standbyPowerValue}
+            onKeyDown={handleKeyDownForDecimals}
             onChange={(e) => handleChange('standbyPowerValue', e.target.value)}
-            onKeyDown={handlePreventInvalidKeys}
             fullWidth
             sx={{ mb: 0 }}
           />
@@ -767,10 +803,10 @@ const DeviceForm: React.FC = () => {
         {formData.category !== 'Solar Panel' && (
           <TextField
             label="Number of Devices"
-            type="number"
+            type="text"
             value={formData.numberOfDevices}
+            onKeyDown={handleKeyDownWholeNumber}
             onChange={(e) => handleChange('numberOfDevices', e.target.value)}
-            onKeyDown={handlePreventInvalidKeys}
             fullWidth
             sx={{ mb: 2 }}
           />
