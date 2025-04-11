@@ -363,7 +363,6 @@ const DashboardPage = () => {
           dailyConsumption = (powerW * quantity * dailyUsageHours) / 1000;
         }
       } else {
-        // For solar panels, you might want to compute production differently.
         dailyConsumption = (powerW * quantity * dailyUsageHours) / 1000;
       }
       catConsumption[category] += dailyConsumption;
@@ -633,34 +632,28 @@ const DashboardPage = () => {
         </Box>
       )}
 
-      {/* Devices summary */}
+      {/* Device Summary - now excluding Solar Panels */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h6" fontWeight="bold" sx={{ mb: 2, fontFamily: 'inherit' }}>
           Device Summary
         </Typography>
-        {devices.length > 0 ? (
+        {devices.filter(device => {
+          const isSolar =
+            device.deviceCategory === 'Solar Panel' ||
+            (device.category && device.category === 'Solar Panel');
+          return !isSolar;
+        }).length > 0 ? (
           <Box sx={{ pl: 2 }}>
-            {devices.map((device) => {
-              const isSolar =
-                device.deviceCategory === 'Solar Panel' ||
-                (device.category && device.category === 'Solar Panel');
-              const displayName = isSolar
-                ? device.panelName || device.name || 'Unnamed Solar Panel'
-                : device.deviceName || 'Unnamed Device';
-              let displayPower: string;
-              if (isSolar) {
-                const powerValue =
-                  (device.powerRating && device.powerRating.value) ||
-                  Number(device.powerRatingValue) || 0;
-                if (powerValue > 0) {
-                  displayPower =
-                    device.powerRating?.value +
-                    ' ' +
-                    (device.powerRating?.unit || device.powerRatingUnit || '');
-                } else {
-                  displayPower = `${totalProduction} kWh`;
-                }
-              } else {
+            {devices
+              .filter(device => {
+                const isSolar =
+                  device.deviceCategory === 'Solar Panel' ||
+                  (device.category && device.category === 'Solar Panel');
+                return !isSolar;
+              })
+              .map((device) => {
+                const displayName = device.deviceName || 'Unnamed Device';
+                let displayPower: string;
                 const powerValue =
                   device.powerRating?.value ||
                   (device.powerRatingValue ? Number(device.powerRatingValue) : 0);
@@ -671,75 +664,31 @@ const DashboardPage = () => {
                 } else {
                   displayPower = 'N/A';
                 }
-              }
-              return (
-                <Box
-                  key={device.deviceId || device.name}
-                  sx={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    mb: 1,
-                    p: 1,
-                    borderRadius: 1,
-                    '&:hover': { backgroundColor: '#f5f5f5' },
-                  }}
-                >
-                  <Typography sx={{ fontFamily: 'inherit' }}>
-                    {displayName} ({device.quantity || 1}x)
-                  </Typography>
-                  <Typography sx={{ fontFamily: 'inherit', color: '#666' }}>{displayPower}</Typography>
-                </Box>
-              );
-            })}
+                return (
+                  <Box
+                    key={device.deviceId || device.name}
+                    sx={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      mb: 1,
+                      p: 1,
+                      borderRadius: 1,
+                      '&:hover': { backgroundColor: '#f5f5f5' },
+                    }}
+                  >
+                    <Typography sx={{ fontFamily: 'inherit' }}>
+                      {displayName} ({device.quantity || 1}x)
+                    </Typography>
+                    <Typography sx={{ fontFamily: 'inherit', color: '#666' }}>{displayPower}</Typography>
+                  </Box>
+                );
+              })}
           </Box>
         ) : (
           <Box sx={{ textAlign: 'center', py: 2, backgroundColor: '#f8f8f8', borderRadius: 2 }}>
             <Typography color="text.secondary">No devices added yet.</Typography>
           </Box>
         )}
-      </Box>
-
-      {/* Energy saving tips */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h6" fontWeight="bold" sx={{ mb: 2, fontFamily: 'inherit' }}>
-          Energy Saving Tips
-        </Typography>
-        <Box
-          sx={{
-            p: 2,
-            backgroundColor: '#f0f7fa',
-            borderRadius: 2,
-            border: '1px solid #d0e6f0',
-          }}
-        >
-          {(() => {
-            try {
-              const tipsData = localStorage.getItem('recommendations');
-              const parsedTips = tipsData ? JSON.parse(tipsData) : {};
-              const tips = parsedTips.recommendations || [];
-              if (tips.length > 0) {
-                return tips.map((tip: any, index: number) => (
-                  <Typography key={index} sx={{ mb: 1, fontFamily: 'inherit' }}>
-                    • {tip.title}: {tip.suggestion}
-                  </Typography>
-                ));
-              } else {
-                return (
-                  <Typography sx={{ fontFamily: 'inherit' }}>
-                    No energy saving tips available.
-                  </Typography>
-                );
-              }
-            } catch (err) {
-              console.error('Error fetching energy saving tips from localStorage', err);
-              return (
-                <Typography sx={{ fontFamily: 'inherit' }}>
-                  No energy saving tips available.
-                </Typography>
-              );
-            }
-          })()}
-        </Box>
       </Box>
     </Box>
   );

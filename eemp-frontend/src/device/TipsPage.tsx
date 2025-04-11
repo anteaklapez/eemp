@@ -1,282 +1,182 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Typography,
-  ToggleButtonGroup,
-  ToggleButton,
-  Collapse,
   useMediaQuery,
   useTheme,
   CircularProgress,
 } from '@mui/material';
-import {
-  Legend as RechartsLegend,
-  Tooltip as RechartsTooltip,
-  PieChart,
-  Pie,
-  Cell,
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend as RechartsLegend } from 'recharts';
 import dayjs from 'dayjs';
 
-// Recommendation tile component
-type TileProps = {
-  title: string;
-  suggestion: string;
-  savings_predictions: string[];
-  efficiency: {
-    daily: number;
-    monthly: number;
-  };
-};
+// --------------------------------------------------------------------------
+// 1. CUSTOM HOOK: useIntersectionRatio
+//    Tracks how much of the element is visible in the viewport (0 to 1).
+// --------------------------------------------------------------------------
+function useIntersectionRatio(
+  ref: React.RefObject<HTMLElement>,
+  options?: IntersectionObserverInit
+) {
+  const [ratio, setRatio] = useState(0);
 
-const Tile: React.FC<TileProps> = ({
-  title,
-  suggestion,
-  savings_predictions,
-  efficiency,
-}) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const handleToggle = () => setIsExpanded(!isExpanded);
+  useEffect(() => {
+    if (!ref.current) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setRatio(entry.intersectionRatio);
+      },
+      {
+        // Provide a dense threshold array [0, 0.01, 0.02, ... , 1] for smooth updates
+        threshold: Array.from({ length: 101 }, (_, i) => i / 100),
+        ...options,
+      }
+    );
+
+    observer.observe(ref.current);
+
+    return () => {
+      if (ref.current) observer.unobserve(ref.current);
+    };
+  }, [ref, options]);
+
+  return ratio;
+}
+
+// --------------------------------------------------------------------------
+// 2. HELPER: parseMarkdownRecommendations
+//    Splits a large recommendation string into sections & items
+// --------------------------------------------------------------------------
+function parseMarkdownRecommendations(text: string) {
+  const lines = text.split('\n').map((l) => l.trim());
+  const sections: { heading: string; items: string[] }[] = [];
+  let currentSection: { heading: string; items: string[] } | null = null;
+
+  lines.forEach((line) => {
+    if (!line) return;
+    if (line.startsWith('### ')) {
+      if (currentSection) sections.push(currentSection);
+      let headingText = line.replace('### ', '').trim();
+      // Remove optional leading "4. " etc.
+      const match = headingText.match(/^(\d+\.\s+)?(.*)$/);
+      if (match) {
+        headingText = match[2].trim();
+      }
+      currentSection = { heading: headingText, items: [] };
+    } else if (currentSection) {
+      currentSection.items.push(line);
+    }
+  });
+
+  if (currentSection) sections.push(currentSection);
+  return sections;
+}
+
+// --------------------------------------------------------------------------
+// 3. HELPER: processBold
+//    Renders any text wrapped in *asterisks* or **double asterisks** in bold.
+// --------------------------------------------------------------------------
+function processBold(text: string): React.ReactNode {
+  const parts = text.split(/(\*{1,2}.*?\*{1,2})/g);
+  return parts.map((part, idx) => {
+    const match = part.match(/^\*{1,2}(.*?)\*{1,2}$/);
+    if (match) {
+      return <strong key={idx}>{match[1]}</strong>;
+    }
+    return part;
+  });
+}
+
+// --------------------------------------------------------------------------
+// 4. CHILD COMPONENT: FadeInCard
+//    Renders a single recommendation card. Uses the custom hook for fade in/out.
+// --------------------------------------------------------------------------
+interface FadeInCardProps {
+  section: { heading: string; items: string[] };
+}
+
+function FadeInCard({ section }: FadeInCardProps) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const ratio = useIntersectionRatio(cardRef);
 
   return (
     <Box
-      onClick={handleToggle}
+      ref={cardRef}
       sx={{
         p: 2,
-        borderRadius: 2,
         backgroundColor: '#f8f8f8',
-        cursor: 'pointer',
+        borderRadius: 2,
         border: '1px solid #e0e0e0',
-        transition: '0.2s',
-        '&:hover': { backgroundColor: '#f2f2f2' },
+        minHeight: 200,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        textAlign: 'left',
+        // The intersection ratio is used as opacity, so the card fades in/out as you scroll.
+        opacity: ratio,
+        transition: 'opacity 0.5s',
       }}
     >
-      <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 0.5 }}>
-        {title}
+      <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>
+        {processBold(section.heading)}
       </Typography>
-      <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
-        {suggestion}
-      </Typography>
-      <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-        <Box sx={{ mt: 1 }}>
-          <Typography
-            variant="body2"
-            sx={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#666' }}
-          >
-            Potential Savings:
-          </Typography>
-          {savings_predictions.map((saving, index) => (
-            <Typography
-              key={index}
-              variant="body2"
-              sx={{ fontSize: '0.8rem', color: '#666' }}
-            >
-              • {saving}
-            </Typography>
-          ))}
-          <Typography
-            variant="body2"
-            sx={{ fontSize: '0.8rem', color: '#666', mt: 1 }}
-          >
-            Daily efficiency gain: {efficiency.daily}%
-          </Typography>
-          <Typography
-            variant="body2"
-            sx={{ fontSize: '0.8rem', color: '#666' }}
-          >
-            Monthly efficiency gain: {efficiency.monthly}%
-          </Typography>
-        </Box>
-      </Collapse>
+      {section.items.map((item, i) => (
+        <Typography key={i} variant="body1" sx={{ mb: 1, ml: 2, fontSize: '1rem' }}>
+          {processBold(item)}
+        </Typography>
+      ))}
     </Box>
   );
-};
+}
 
-const RecommendationsScreen: React.FC = () => {
+// --------------------------------------------------------------------------
+// 5. PARENT COMPONENT: TipsPage (or RecommendationsScreen)
+//    Fetches data, renders the PieChart, and a list of <FadeInCard> items.
+// --------------------------------------------------------------------------
+const TipsPage: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const [timeframe, setTimeframe] = useState<'weekly' | 'monthly' | 'yearly'>(
-    'weekly'
-  );
-  const [recommendations, setRecommendations] = useState([]);
+
+  const [recommendations, setRecommendations] = useState<string>('');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Line chart data
-  const consumptionDataWeek = [
-    { name: 'Mon', current: 15, recommended: 12 },
-    { name: 'Tue', current: 18, recommended: 14 },
-    { name: 'Wed', current: 25, recommended: 20 },
-    { name: 'Thu', current: 22, recommended: 20 },
-    { name: 'Fri', current: 30, recommended: 28 },
-  ];
-  const consumptionDataMonth = [
-    { name: 'Apr', current: 20, recommended: 18 },
-    { name: 'May', current: 15, recommended: 14 },
-    { name: 'Jun', current: 25, recommended: 22 },
-    { name: 'Jul', current: 35, recommended: 32 },
-    { name: 'Aug', current: 40, recommended: 38 },
-    { name: 'Sep', current: 30, recommended: 28 },
-    { name: 'Oct', current: 45, recommended: 42 },
-  ];
-  const consumptionDataYear = [
-    { name: 'Jan', current: 10, recommended: 9 },
-    { name: 'Feb', current: 12, recommended: 11 },
-    { name: 'Mar', current: 20, recommended: 18 },
-    { name: 'Apr', current: 15, recommended: 14 },
-    { name: 'May', current: 25, recommended: 23 },
-    { name: 'Jun', current: 30, recommended: 28 },
-    { name: 'Jul', current: 36, recommended: 34 },
-    { name: 'Aug', current: 40, recommended: 38 },
-    { name: 'Sep', current: 25, recommended: 23 },
-    { name: 'Oct', current: 42, recommended: 40 },
-    { name: 'Nov', current: 28, recommended: 26 },
-    { name: 'Dec', current: 35, recommended: 33 },
-  ];
-  const consumptionDataSets = {
-    week: consumptionDataWeek,
-    month: consumptionDataMonth,
-    year: consumptionDataYear,
-  };
-  const currentLineData = consumptionDataSets[timeframe];
+  // Pie chart data
+  const [roomsConsumption, setRoomsConsumption] = useState<
+    { name: string; consumption: number }[]
+  >([]);
+  const pieColors = ['#5A9FA3', '#FF8A65', '#4DB6AC', '#BA68C8', '#FFD54F', '#90A4AE'];
 
-  // Fetch recommendations from the backend
+  // ------------------------------------------------------------------------
+  // Fetch Recommendations
+  // ------------------------------------------------------------------------
   useEffect(() => {
     const fetchRecommendations = async () => {
       setLoading(true);
       try {
-        // First check if recommendations exist in localStorage
-        const storedRecommendations = localStorage.getItem('recommendations');
-
-        if (storedRecommendations) {
-          const parsedRecommendations = JSON.parse(storedRecommendations);
-          setRecommendations(parsedRecommendations.recommendations || []);
-          setEfficiencyData(parsedRecommendations.predicted_efficiency || {});
-          setCurrentEfficiencyData(
-            parsedRecommendations.current_efficiency || {}
-          );
+        const stored = localStorage.getItem('recommendations');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (typeof parsed.recommendations === 'string') {
+            setRecommendations(parsed.recommendations);
+          } else {
+            setRecommendations(JSON.stringify(parsed.recommendations));
+          }
           setLoading(false);
           return;
         }
+        // Dummy data if none found
+        const dummy = `
+### 4. **Seasonal Adjustments**
+- Efficiency Checks: Keep panels clean, especially when transitioning to cooler weather.
+- Temperature Impact: Cooler temperatures can improve solar panel efficiency.
 
-        // If no stored recommendations, fetch from API
-        // Get devices from localStorage
-        const storedDevicesStr = localStorage.getItem('devices') || '[]';
-        const storedDevices = JSON.parse(storedDevicesStr);
-
-        // Get location from localStorage
-        const userLocationStr = localStorage.getItem('userLocation') || '{}';
-        const userLocation = JSON.parse(userLocationStr);
-
-        // Prepare location data
-        const location = {
-          latitude: userLocation.latitude || 45.815399,
-          longitude: userLocation.longitude || 15.966568,
-          country: userLocation.country || 'Croatia',
-          altitude: userLocation.altitude || 122,
-          name: userLocation.name || 'Zagreb, Croatia',
-          timezone: userLocation.timezone || 'Europe/Zagreb',
-        };
-
-        // Find solar panel device
-        const solarDevice = storedDevices.find(
-          (device) =>
-            device.category === 'Solar Panel' ||
-            device.deviceCategory === 'Solar Panel'
-        );
-
-        // Prepare solar panel data
-        let solarPanelData = {
-          inverter_name: 'ABB__MICRO_0_3HV_I_OUTD_US_208__208V_',
-          module_name: 'Advent_Solar_AS160___2006_',
-          tilt: 30.0,
-          orientation: 180.0,
-          capacity: 300,
-          efficiency: 21.5,
-          installation_year: 2022,
-        };
-
-        // If we have a solar device, use its data
-        if (solarDevice) {
-          solarPanelData = {
-            inverter_name:
-              solarDevice.inverter || 'ABB__MICRO_0_3HV_I_OUTD_US_208__208V_',
-            module_name: solarDevice.module || 'Advent_Solar_AS160___2006_',
-            tilt: parseFloat(solarDevice.tilt) || 30.0,
-            orientation: parseFloat(solarDevice.orientation) || 180.0,
-            capacity: 300, // Default if not specified
-            efficiency: 21.5, // Default if not specified
-            installation_year: 2022, // Default if not specified
-          };
-        }
-
-        // Prepare non-solar devices for the request
-        const devices = storedDevices
-          .filter(
-            (device) =>
-              device.category !== 'Solar Panel' &&
-              device.deviceCategory !== 'Solar Panel'
-          )
-          .map((device) => ({
-            deviceId: device.deviceId || device.id || '',
-            deviceName: device.deviceName || device.name || '',
-            powerRating: device.powerRating || {
-              value: parseFloat(device.powerRatingValue) || 0,
-              unit: device.powerRatingUnit || 'W',
-            },
-            usagePattern: {
-              usage_times:
-                device.usagePattern?.usage_times || device.usageTimes || [],
-              frequency_unit: 'days',
-              frequency_value: 1,
-            },
-            energyType: device.energyType || 'AC',
-            standbyPower: device.standbyPower || {
-              value: parseFloat(device.standbyPowerValue) || 0,
-              unit: device.standbyPowerUnit || 'W',
-            },
-            deviceCategory: device.deviceCategory || device.category || '',
-            numberOfDevices: parseInt(device.quantity) || 1,
-            room: device.room || {
-              roomId: device.roomId || '',
-              roomName: device.roomName || '',
-              roomType: device.roomType || '',
-            },
-          }));
-
-        // Prepare the request payload
-        const payload = {
-          location,
-          solar_panel_data: solarPanelData,
-          devices,
-        };
-
-        // Make the API request
-        const response = await fetch(
-          'https://eemp-backend-production.up.railway.app/recommendations',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payload),
-          }
-        );
-
-        const data = await response.json();
-
-        // Store recommendations in localStorage for future use
-        localStorage.setItem('recommendations', JSON.stringify(data));
-
-        setRecommendations(data.recommendations || []);
+### Device Usage Optimization
+- LED Bulbs: Turn off when not in use.
+- Smart Sensors: Automate device control to save energy.
+        `;
+        localStorage.setItem('recommendations', JSON.stringify({ recommendations: dummy }));
+        setRecommendations(dummy);
       } catch (err) {
         console.error('Error fetching recommendations:', err);
         setError('Failed to load recommendations. Please try again later.');
@@ -288,11 +188,9 @@ const RecommendationsScreen: React.FC = () => {
     fetchRecommendations();
   }, []);
 
-  // Room consumption data
-  const [roomsConsumption, setRoomsConsumption] = useState<
-    { name: string; consumption: number }[]
-  >([]);
-
+  // ------------------------------------------------------------------------
+  // Pie Chart Logic
+  // ------------------------------------------------------------------------
   useEffect(() => {
     const storedDevicesStr = localStorage.getItem('devices') || '[]';
     let storedDevices: any[] = [];
@@ -301,29 +199,20 @@ const RecommendationsScreen: React.FC = () => {
     } catch (error) {
       console.error('Error parsing devices:', error);
     }
-
-    // Exclude solar devices
     const filteredDevices = storedDevices.filter((dev) => {
       const cat = dev.category || dev.deviceCategory;
       return cat !== 'Solar Panel';
     });
-
-    // Compute consumption for each device (multiplying by quantity)
     const consumptionPerDevice = filteredDevices.map((dev) => {
-      if (!dev.room && !dev.roomName && typeof dev.room !== 'string') {
-        return null;
-      }
+      if (!dev.room && !dev.roomName && typeof dev.room !== 'string') return null;
       const powerKW =
         dev.powerRating && dev.powerRating.value
-          ? Number(dev.powerRating.value) /
-            (dev.powerRating.unit === 'W' ? 1000 : 1)
+          ? Number(dev.powerRating.value) / (dev.powerRating.unit === 'W' ? 1000 : 1)
           : 0;
       const standbyKW =
         dev.standbyPower && dev.standbyPower.value
-          ? Number(dev.standbyPower.value) /
-            (dev.standbyPower.unit === 'W' ? 1000 : 1)
+          ? Number(dev.standbyPower.value) / (dev.standbyPower.unit === 'W' ? 1000 : 1)
           : 0;
-
       let avgActiveHours = 1;
       if (
         dev.usagePattern &&
@@ -338,8 +227,7 @@ const RecommendationsScreen: React.FC = () => {
           if (h < 0) h += 24;
           return Math.max(0, Math.min(24, h));
         });
-        avgActiveHours =
-          hoursArr.reduce((a: number, b: number) => a + b, 0) / hoursArr.length;
+        avgActiveHours = hoursArr.reduce((a: number, b: number) => a + b, 0) / hoursArr.length;
       }
       const activeConsumption = powerKW * avgActiveHours;
       const standbyConsumption = standbyKW * (24 - avgActiveHours);
@@ -364,63 +252,18 @@ const RecommendationsScreen: React.FC = () => {
         roomMap.set(key, prev + item.consumption);
       }
     });
-    const consumptionArray = Array.from(roomMap.entries()).map(
-      ([key, consumption]) => {
-        const [roomName, roomType] = key.split('||');
-        const displayName = roomType ? `${roomName} (${roomType})` : roomName;
-        return { name: displayName, consumption };
-      }
-    );
+
+    const consumptionArray = Array.from(roomMap.entries()).map(([key, consumption]) => {
+      const [roomName, roomType] = key.split('||');
+      const displayName = roomType ? `${roomName} (${roomType})` : roomName;
+      return { name: displayName, consumption };
+    });
+
     setRoomsConsumption(consumptionArray);
   }, []);
 
-  // Colors for the pie chart
-  const pieColors = [
-    '#5A9FA3',
-    '#FF8A65',
-    '#4DB6AC',
-    '#BA68C8',
-    '#FFD54F',
-    '#90A4AE',
-  ];
-
-  // Timeframe toggle handler
-  const handleTimeframeChange = (
-    event: React.MouseEvent<HTMLElement>,
-    newValue: 'weekly' | 'monthly' | 'yearly' | null
-  ) => {
-    if (newValue) {
-      setTimeframe(newValue);
-    }
-  };
-
-  // Toggle button style
-  const toggleBtnSx = {
-    textTransform: 'none',
-    width: 36,
-    height: 36,
-    borderRadius: '50%',
-    fontSize: '14px',
-    fontWeight: 'bold',
-    border: 'none',
-    transition: 'background-color 0.2s ease-in-out',
-  };
-
-  const [efficiencyData, setEfficiencyData] = useState({});
-  const [currentEfficiencyData, setCurrentEfficiencyData] = useState({});
-
-  const getChartData = () => {
-    const data = efficiencyData[timeframe] || {};
-    const currentData = currentEfficiencyData[timeframe] || {};
-
-    return Object.keys(data).map((key) => ({
-      name: timeframe === 'yearly' ? key : dayjs(key).format('DD MMM'),
-      predicted: data[key],
-      current: currentData[key] || 0,
-    }));
-  };
-
-  const chartData = getChartData();
+  // Parse recommendations
+  const sections = parseMarkdownRecommendations(recommendations);
 
   return (
     <Box
@@ -435,7 +278,7 @@ const RecommendationsScreen: React.FC = () => {
     >
       {/* Header */}
       <Box sx={{ width: '100%', mb: 3 }}>
-        <Typography variant="h6" fontWeight="bold" sx={{ mb: 1 }}>
+        <Typography variant="h4" fontWeight="bold" sx={{ mb: 1 }}>
           Recommendations
         </Typography>
         <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 3 }}>
@@ -443,7 +286,7 @@ const RecommendationsScreen: React.FC = () => {
         </Typography>
       </Box>
 
-      {/* Pie Chart for Energy Consumption by Room */}
+      {/* Pie Chart Section */}
       <Box
         sx={{
           mb: 3,
@@ -453,7 +296,7 @@ const RecommendationsScreen: React.FC = () => {
           alignItems: 'center',
         }}
       >
-        <Typography variant="subtitle1" sx={{ fontWeight: 400, mb: 1 }}>
+        <Typography variant="h6" sx={{ fontWeight: 400, mb: 1 }}>
           Energy Consumption by Room
         </Typography>
         {roomsConsumption.length > 0 ? (
@@ -469,15 +312,10 @@ const RecommendationsScreen: React.FC = () => {
               animationEasing="ease-out"
             >
               {roomsConsumption.map((entry, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={pieColors[index % pieColors.length]}
-                />
+                <Cell key={`cell-${index}`} fill={pieColors[index % pieColors.length]} />
               ))}
             </Pie>
-            <RechartsTooltip
-              formatter={(value: number) => `${value.toFixed(2)} kWh`}
-            />
+            <RechartsTooltip formatter={(value: number) => `${value.toFixed(2)} kWh`} />
             <RechartsLegend
               verticalAlign="bottom"
               align="center"
@@ -486,18 +324,15 @@ const RecommendationsScreen: React.FC = () => {
             />
           </PieChart>
         ) : (
-          <Typography variant="body2">
-            No room consumption data available.
-          </Typography>
+          <Typography variant="body2">No room consumption data available.</Typography>
         )}
       </Box>
 
-      {/* Recommendations from API */}
+      {/* Recommendations Section */}
       <Box sx={{ width: '100%', mb: 4 }}>
-        <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>
+        <Typography variant="h5" fontWeight="bold" sx={{ mb: 2 }}>
           Today's Suggestions
         </Typography>
-
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
             <CircularProgress />
@@ -506,155 +341,21 @@ const RecommendationsScreen: React.FC = () => {
           <Typography color="error" sx={{ textAlign: 'center', p: 2 }}>
             {error}
           </Typography>
-        ) : recommendations.length > 0 ? (
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: '1rem',
-            }}
-          >
-            {recommendations.map((rec, index) => (
-              <Tile
-                key={index}
-                title={rec.title}
-                suggestion={rec.suggestion}
-                savings_predictions={rec.savings_predictions}
-                efficiency={rec.efficiency}
-              />
-            ))}
-          </Box>
-        ) : (
+        ) : !recommendations ? (
           <Typography sx={{ textAlign: 'center', p: 2 }}>
             No recommendations available.
           </Typography>
+        ) : (
+          // Render each recommendation section as a FadeInCard
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {sections.map((sec, idx) => (
+              <FadeInCard key={idx} section={sec} />
+            ))}
+          </Box>
         )}
-      </Box>
-
-      {/* Efficiency Gains - Line Chart Section */}
-      <Box sx={{ width: '100%' }}>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            mb: 2,
-          }}
-        >
-          <Typography variant="h6" fontWeight="bold">
-            Efficiency Gains
-          </Typography>
-          <ToggleButtonGroup
-            value={timeframe}
-            exclusive
-            onChange={handleTimeframeChange}
-            sx={{
-              backgroundColor: '#F8F8F8',
-              border: '1px solid #ddd',
-              p: 0.5,
-              borderRadius: '9999px',
-            }}
-          >
-            <ToggleButton
-              value="weekly"
-              disableRipple
-              sx={{
-                ...toggleBtnSx,
-                backgroundColor:
-                  timeframe === 'weekly'
-                    ? '#6B97A4 !important'
-                    : '#F5F5F5 !important',
-                color: timeframe === 'weekly' ? '#fff' : '#666',
-                '&:hover': {
-                  backgroundColor:
-                    timeframe === 'weekly'
-                      ? '#6B97A4 !important'
-                      : '#F5F5F5 !important',
-                },
-              }}
-            >
-              W
-            </ToggleButton>
-            <ToggleButton
-              value="monthly"
-              disableRipple
-              sx={{
-                ...toggleBtnSx,
-                backgroundColor:
-                  timeframe === 'monthly'
-                    ? '#6B97A4 !important'
-                    : '#F5F5F5 !important',
-                color: timeframe === 'monthly' ? '#fff' : '#666',
-                '&:hover': {
-                  backgroundColor:
-                    timeframe === 'monthly'
-                      ? '#6B97A4 !important'
-                      : '#F5F5F5 !important',
-                },
-              }}
-            >
-              M
-            </ToggleButton>
-            <ToggleButton
-              value="yearly"
-              disableRipple
-              sx={{
-                ...toggleBtnSx,
-                backgroundColor:
-                  timeframe === 'yearly'
-                    ? '#6B97A4 !important'
-                    : '#F5F5F5 !important',
-                color: timeframe === 'yearly' ? '#fff' : '#666',
-                '&:hover': {
-                  backgroundColor:
-                    timeframe === 'yearly'
-                      ? '#6B97A4 !important'
-                      : '#F5F5F5 !important',
-                },
-              }}
-            >
-              Y
-            </ToggleButton>
-          </ToggleButtonGroup>
-        </Box>
-
-        {/* Line Chart */}
-        <Box sx={{ width: '100%', height: 220, mb: 2 }}>
-          {chartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="name"
-                  tick={{ fontSize: 12 }}
-                  interval={'preserveStartEnd'}
-                />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="predicted"
-                  stroke="#8884d8"
-                  name="Predicted Efficiency"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="current"
-                  stroke="#82ca9d"
-                  name="Current Efficiency"
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <Typography variant="body2" sx={{ textAlign: 'center', py: 4 }}>
-              No data available.
-            </Typography>
-          )}
-        </Box>
       </Box>
     </Box>
   );
 };
 
-export default RecommendationsScreen;
+export default TipsPage;
