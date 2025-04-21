@@ -12,7 +12,7 @@ Built using FastAPI, hosted on Railway.
 Developed with React.js, hosted on Railway.
 
 ### Machine Learning: 
-Models are trained using XGBoost and hosted on Google Cloud.
+Models are trained using XGBoost and trained on Google Cloud, hosted within backend on Railway.
 
 ### Data Sources:
 
